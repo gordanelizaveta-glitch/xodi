@@ -209,7 +209,7 @@ function writeSettingsSafe(partial) {
 
 
 const config = {
-  type: Phaser.AUTO,
+  type: Phaser.ENVELOP,
   parent: 'game-container',
   transparent: true,
 backgroundColor: 'rgba(0,0,0,0)',
