@@ -215,13 +215,11 @@ const config = {
 backgroundColor: 'rgba(0,0,0,0)',
 
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-
-    // базовый размер, дальше Phaser сам ресайзит
-    width: 1920,
-    height: 1080
-  },
+  mode: Phaser.Scale.FIT,
+  autoCenter: Phaser.Scale.CENTER_BOTH,
+  width: 1920,
+  height: 1080
+},
   scene: []
 };
 
