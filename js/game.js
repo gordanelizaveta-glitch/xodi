@@ -2813,15 +2813,34 @@ createGameTimerUI() {
 layoutGameTimerUI() {
   if (!this.gameTimerText) return;
 
-  const W = this.scale.width;
-  const pad = Math.round(Math.max(10, W * 0.02));
+  // берем игровые размеры
+  const W = this.scale.gameSize ? this.scale.gameSize.width : this.scale.width;
+  const H = this.scale.gameSize ? this.scale.gameSize.height : this.scale.height;
+
+  // чем "квадратнее" экран, тем больше режется
+  const aspect = Math.max(W, H) / Math.min(W, H);
+  const isSquarish = (aspect <= 1.25);
+
+  // SAFE отступ слева
+  const padX = Math.round(Phaser.Math.Clamp(
+    W * (isSquarish ? 0.12 : 0.08),
+    80,
+    200
+  ));
+
+  // SAFE отступ сверху
+  const padY = Math.round(Phaser.Math.Clamp(
+    H * 0.06,
+    60,
+    160
+  ));
 
   if (this._bottomUiY) {
     this.gameTimerText.setOrigin(0, 0.5);
-    this.gameTimerText.setPosition(pad, this._bottomUiY);
+    this.gameTimerText.setPosition(padX, this._bottomUiY);
   } else {
     this.gameTimerText.setOrigin(0, 0);
-    this.gameTimerText.setPosition(pad, pad);
+    this.gameTimerText.setPosition(padX, padY);
   }
 }
 
