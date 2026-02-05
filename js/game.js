@@ -797,9 +797,10 @@ layoutUI() {
   if (this.ui && this.ui.rewardsIcon) { try { this.ui.rewardsIcon.destroy(); } catch (e) {} this.ui.rewardsIcon = null; }
   if (this.ui && this.ui.statsIcon) { try { this.ui.statsIcon.destroy(); } catch (e) {} this.ui.statsIcon = null; }
 
-  const W = this.scale.width;
-  const H = this.scale.height;
-  const cx = this.cameras.main.centerX;
+  // ВАЖНО: берем игровые размеры (а не размеры DOM)
+  const W = this.scale.gameSize ? this.scale.gameSize.width : this.scale.width;
+  const H = this.scale.gameSize ? this.scale.gameSize.height : this.scale.height;
+  const cx = W / 2;
 
   const isSmallScreen = (Math.min(W, H) <= 600);
 
@@ -807,8 +808,6 @@ layoutUI() {
   const aspect = Math.max(W, H) / Math.min(W, H);
   const isSquarish = (aspect <= 1.25);
   const useVerticalButtons = isSquarish;
-
-  const L = getLayout(this);
 
   const minSide = Math.min(W, H);
   const S = minSide;
@@ -819,27 +818,37 @@ layoutUI() {
   if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
   if (isSquarish) btnScale *= 1.05;
 
+  // ---- SAFE ОТСТУПЫ (чтобы не резалось ENVELOP в VK) ----
+  // Чем меньше окно и чем "квадратнее" - тем больше отступ
+  const padX = Math.round(Phaser.Math.Clamp(W * (isSquarish ? 0.12 : 0.08), 90, 220));
+  const padY = Math.round(Phaser.Math.Clamp(H * (isSquarish ? 0.10 : 0.07), 70, 180));
+
+  const left = padX;
+  const right = W - padX;
+  const top = padY;
+  const bottom = H - padY;
+
+  const innerW = right - left;
+
   // ---------- 3 кнопки ----------
   const t = (k, fallback) =>
     (window.APP && window.APP.i18n && window.APP.i18n.t ? window.APP.i18n.t(k) : fallback);
 
   if (useVerticalButtons) {
     const spacingBase = isSquarish ? 200 : 80;
-    const spacing = Math.round(spacingBase * L.s);
+    const spacing = Math.round(spacingBase * (Math.min(W, H) / 900));
 
-    let startY = Math.round(H * 0.66);
+    // ставим ближе к низу, но внутри safe
+    let startY = Math.round(bottom - spacing * 2);
 
-    const bottomLimit = Math.round(H * 0.88);
-    const lastY = startY + spacing * 2;
-    if (lastY > bottomLimit) startY -= (lastY - bottomLimit);
-
-    const topLimit = Math.round(H * 0.34);
+    // защита от слишком низко/высоко
+    const topLimit = Math.round(top + H * 0.18);
     if (startY < topLimit) startY = topLimit;
 
+    // кнопки строго по центру
     this.createButton(cx, startY, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
       if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
 
-      // НЕ показываем рекламу на первую партию за запуск
       if (!window.__ad_skip_first_party_done) {
         window.__ad_skip_first_party_done = true;
         this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
@@ -869,19 +878,22 @@ layoutUI() {
     }, btnScale);
 
   } else {
-    const spacingX = Math.round(Phaser.Math.Clamp(W * 0.28, 260, 420));
-
+    // Горизонтальные кнопки, но НЕ у края
+    // Вместо "cx ± 0.28W" раскладываем внутри safe-зоны
     let y = Math.round(H * 0.70);
-    if (y > Math.round(H * 0.82)) y = Math.round(H * 0.78);
+    y = Phaser.Math.Clamp(y, Math.round(top + H * 0.35), Math.round(bottom - H * 0.12));
 
-    this.createButton(cx - spacingX, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
+    const x1 = left + innerW * 0.18;
+    const x2 = left + innerW * 0.50;
+    const x3 = left + innerW * 0.82;
+
+    this.createButton(x1, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
       this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
     }, btnScale);
 
-    this.createButton(cx, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
+    this.createButton(x2, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
       if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
 
-      // НЕ показываем рекламу на первую партию за запуск
       if (!window.__ad_skip_first_party_done) {
         window.__ad_skip_first_party_done = true;
         this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
@@ -902,36 +914,27 @@ layoutUI() {
       }
     }, btnScale);
 
-    this.createButton(cx + spacingX, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
+    this.createButton(x3, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
       this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
     }, btnScale);
   }
 
   // ---------- Иконки "Награды" и "Статистика" ----------
-  this.iconSize = getUIIconSize(this);
+  const iconSize = getUIIconSize(this);
+  this.iconSize = iconSize;
 
-  let xDesign, yDesign;
-  if (isSquarish) {
-    const padX = Math.round(Phaser.Math.Clamp(L.DW * 0.06, 40, 70));
-    const padY = 480;
-    xDesign = L.DW - padX;
-    yDesign = padY;
-  } else {
-    const padX = 92;
-    const padY = 92;
-    xDesign = L.DW - padX;
-    yDesign = padY;
-  }
+  // Иконки справа сверху, но внутри safe-зоны
+  const iconPad = Math.round(Phaser.Math.Clamp(iconSize * 0.65, 44, 90));
+  const iconX = right - iconPad;
+  const iconY = top + iconPad;
 
-  const p = dxy(L, xDesign, yDesign);
-
-  this.rewardsIcon = this.add.image(p.x, p.y, 'icon_rewards')
+  const rewardsIcon = this.add.image(iconX, iconY, 'icon_rewards')
     .setOrigin(0.5)
     .setDepth(50)
     .setScrollFactor(0);
 
   applyRoundIcon(this, rewardsIcon, iconSize, 1.35);
-  rewardsIcon.input.useHandCursor = true;
+  rewardsIcon.setInteractive({ useHandCursor: true });
   this.ui.rewardsIcon = rewardsIcon;
 
   let restScale = rewardsIcon._baseScale || rewardsIcon.scale;
@@ -1053,7 +1056,7 @@ layoutUI() {
     });
   });
 
-  // Статистика под наградами
+  // Статистика под наградами (тоже внутри safe)
   const gap = isSmallScreen ? 1.10 : 1.25;
   const statsY = rewardsIcon.y + Math.round(iconSize * gap);
 
@@ -1063,7 +1066,7 @@ layoutUI() {
     .setScrollFactor(0);
 
   applyRoundIcon(this, statsIcon, iconSize, 1.35);
-  statsIcon.input.useHandCursor = true;
+  statsIcon.setInteractive({ useHandCursor: true });
   this.ui.statsIcon = statsIcon;
 
   const statsRestScale = statsIcon.scale;
@@ -1090,6 +1093,7 @@ layoutUI() {
     this.tweens.add({ targets: statsIcon, scale: statsRestScale * 0.92, duration: 90, ease: 'Power1' });
   });
 }
+
 
   openStatsPopup() {
     if (this._statsPopupOpen) return;
