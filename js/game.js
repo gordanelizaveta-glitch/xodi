@@ -215,10 +215,10 @@ const config = {
 backgroundColor: 'rgba(0,0,0,0)',
 
   scale: {
-  mode: Phaser.Scale.FIT,
+  mode: Phaser.Scale.ENVELOP,
   autoCenter: Phaser.Scale.CENTER_BOTH,
-  width: 1920,
-  height: 1080
+  width: 1280,
+  height: 720
 },
   scene: []
 };
