@@ -2668,24 +2668,30 @@ buildLayout() {
 }
 
 layoutUI() {
-  const W = this.scale.width;
-  const H = this.scale.height;
-  const pad = Math.round(Math.max(10, Math.min(W, H) * 0.03));
+  // Берем игровые размеры (внутренние), а не DOM
+  const W = this.scale.gameSize ? this.scale.gameSize.width : this.scale.width;
+  const H = this.scale.gameSize ? this.scale.gameSize.height : this.scale.height;
 
-  const dev = this.sys.game.device;
+  // Насколько "квадратно" окно - в таких случаях ENVELOP режет сильнее
+  const aspect = Math.max(W, H) / Math.min(W, H);
+  const isSquarish = (aspect <= 1.25);
+  const isSmallScreen = (Math.min(W, H) <= 600);
+
+  // SAFE отступы: чем "квадратнее" и меньше экран - тем больше
+  const padX = Math.round(Phaser.Math.Clamp(W * (isSquarish ? 0.12 : 0.08), 70, 220));
+  const padY = Math.round(Phaser.Math.Clamp(H * (isSquarish ? 0.10 : 0.07), 60, 200));
+
+  const left = padX;
+  const right = W - padX;
+  const top = padY;
+  const bottom = H - padY;
 
   // ===== РАЗМЕР КНОПОК =====
   let baseSize = Math.round(Math.min(105, W * 0.09));
+  let sizeMul = 1.0;
+  if (isSmallScreen) sizeMul = 1.15;
 
-   let sizeMul = 1.0;
-
-// опционально: чуть крупнее на реально маленьких экранах, но не портрет
-   const isSmallScreen = (Math.min(W, H) <= 600);
-   if (isSmallScreen) sizeMul = 1.15;
-
-   const btnSize = Math.round(baseSize * sizeMul);
-
-
+  const btnSize = Math.round(baseSize * sizeMul);
 
   // аккуратный ресайз без искажения пропорций
   const setBtnHeight = (img, hPx) => {
@@ -2693,23 +2699,20 @@ layoutUI() {
     const tex = img.texture && img.texture.getSourceImage ? img.texture.getSourceImage() : null;
     const iw = (tex && tex.width) ? tex.width : (img.width || 1);
     const ih = (tex && tex.height) ? tex.height : (img.height || 1);
-
     const sc = hPx / ih;
     img.setDisplaySize(Math.round(iw * sc), Math.round(ih * sc));
   };
 
-  // обычные кнопки: высота = btnSize, ширина по пропорциям
   setBtnHeight(this.ui && this.ui.home, btnSize);
   setBtnHeight(this.ui && this.ui.settings, btnSize);
   setBtnHeight(this.ui && this.ui.undo, btnSize);
 
   // restart - вытянутая
   if (this.ui && this.ui.restart) {
-  const h = Math.round(btnSize * 0.85);
-  const w = Math.round(btnSize * 1.25);
-  this.ui.restart.setDisplaySize(w, h);
+    const h = Math.round(btnSize * 0.85);
+    const w = Math.round(btnSize * 1.25);
+    this.ui.restart.setDisplaySize(w, h);
   }
-
 
   // актуальные размеры после ресайза
   const homeW = (this.ui && this.ui.home) ? this.ui.home.displayWidth : btnSize;
@@ -2726,52 +2729,54 @@ layoutUI() {
 
   const gap = Math.round(btnSize * 0.25);
 
-  // ===== ПОЗИЦИИ =====
+  // ===== ПОЗИЦИИ (внутри safe-зоны) =====
+  const btnHome = this.ui && this.ui.home;
+  const btnSound = this.ui && this.ui.settings;
+  const btnUndo = this.ui && this.ui.undo;
+  const btnRestart = this.ui && this.ui.restart;
 
-// кнопки
-const btnHome = this.ui && this.ui.home;
-const btnSound = this.ui && this.ui.settings; // это звук
-const btnUndo = this.ui && this.ui.undo;
-const btnRestart = this.ui && this.ui.restart;
+  // Справа сверху: HOME
+  if (btnHome) {
+    btnHome.setPosition(
+      right - homeW * 0.5,
+      top + homeH * 0.5
+    );
+  }
 
-const topY = pad;
-const rightX = W - pad;
+  // Под HOME: SOUND
+  if (btnSound) {
+    btnSound.setPosition(
+      right - settingsW * 0.5,
+      top + homeH + gap + settingsH * 0.5
+    );
+  }
 
-const bottomY = H - pad;
-const leftX = pad;
+  // Слева снизу: RESTART
+  if (btnRestart) {
+    btnRestart.setPosition(
+      left + restartW * 0.5,
+      bottom - restartH * 0.5
+    );
+  }
 
-// Справа сверху: HOME
-if (btnHome) {
-  btnHome.setPosition(
-    rightX - homeW * 0.5,
-    topY + homeH * 0.5
-  );
+  // Справа от RESTART: UNDO
+  if (btnUndo) {
+    btnUndo.setPosition(
+      left + restartW + gap + undoW * 0.5,
+      bottom - undoH * 0.5
+    );
+  }
+
+  // После изменения layout нужно обновить "базу" для hover-анимаций
+  if (this._uiBase && this.ui) {
+    for (const k of ['home', 'settings', 'undo', 'restart']) {
+      const btn = this.ui[k];
+      if (!btn) continue;
+      if (btn.__saveBase) btn.__saveBase();
+    }
+  }
 }
 
-// Под HOME: SOUND
-if (btnSound) {
-  btnSound.setPosition(
-    rightX - settingsW * 0.5,
-    topY + homeH + gap + settingsH * 0.5
-  );
-}
-
-// Слева снизу: RESTART
-if (btnRestart) {
-  btnRestart.setPosition(
-    leftX + restartW * 0.5,
-    bottomY - restartH * 0.5
-  );
-}
-
-// Справа от RESTART, на той же высоте: UNDO
-if (btnUndo) {
-  btnUndo.setPosition(
-    leftX + restartW + gap + undoW * 0.5,
-    bottomY - undoH * 0.5
-  );
-}
-}
 
 
   
