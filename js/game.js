@@ -2824,7 +2824,7 @@ layoutGameTimerUI() {
   // SAFE отступ слева
   const padX = Math.round(Phaser.Math.Clamp(
     W * (isSquarish ? 0.12 : 0.08),
-    60,
+    48,
     160
   ));
 
