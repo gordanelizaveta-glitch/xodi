@@ -219,8 +219,8 @@ backgroundColor: 'rgba(0,0,0,0)',
     autoCenter: Phaser.Scale.CENTER_BOTH,
 
     // базовый размер, дальше Phaser сам ресайзит
-    width: 720,
-    height: 1280
+    width: 1920,
+    height: 1080
   },
   scene: []
 };
