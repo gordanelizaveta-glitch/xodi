@@ -37,6 +37,10 @@
       height: calc(var(--vh, 1vh) * 100);
       overflow: hidden;
 
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
       touch-action: none;
       -webkit-user-select: none;
       user-select: none;
@@ -45,14 +49,12 @@
     }
 
     #game-container canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
-      -webkit-tap-highlight-color: transparent;
-    }
+  display: block;
+  /* НЕ тянем canvas через CSS */
+  width: auto !important;
+  height: auto !important;
+  margin: 0 auto;
+}
 
     @font-face {
       font-family: "Cygre ExtraBold";
