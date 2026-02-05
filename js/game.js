@@ -223,6 +223,41 @@ backgroundColor: 'rgba(0,0,0,0)',
   scene: []
 };
 
+function getSafeBounds(scene, margin = 24) {
+  const scale = scene.scale;
+
+  const gameW = scale.gameSize.width;
+  const gameH = scale.gameSize.height;
+
+  // реальные CSS размеры canvas и родителя (iframe)
+  const dispW = scale.displaySize.width;
+  const dispH = scale.displaySize.height;
+
+  const parentW = scale.parentSize ? scale.parentSize.width : dispW;
+  const parentH = scale.parentSize ? scale.parentSize.height : dispH;
+
+  // во сколько раз canvas масштабирован относительно "игровых" единиц
+  const sx = dispW / gameW;
+  const sy = dispH / gameH;
+
+  // сколько обрезано с каждой стороны в мировых координатах
+  const cropX = Math.max(0, (dispW - parentW) / sx / 2);
+  const cropY = Math.max(0, (dispH - parentH) / sy / 2);
+
+  const left = cropX + margin;
+  const right = gameW - cropX - margin;
+  const top = cropY + margin;
+  const bottom = gameH - cropY - margin;
+
+  return {
+    left, right, top, bottom,
+    centerX: (left + right) / 2,
+    centerY: (top + bottom) / 2,
+    width: right - left,
+    height: bottom - top
+  };
+}
+
 
 // ===== Rewards (HTML overlay) helpers =====
 window.__rewardsPrevScene = null;
@@ -582,6 +617,9 @@ if (forceMenu) {
   }
 }
 
+  this.layoutUI();
+
+
     // фон + UI
     this.createBackgroundVideo();
     this.createUI();
@@ -683,6 +721,37 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
     });
   });
 }
+
+layoutUI() {
+  const safe = getSafeBounds(this, 40);
+
+  // ↓↓↓ ВАЖНО ↓↓↓
+  // Тут ты просто ДВИГАЕШЬ кнопки,
+  // которые УЖЕ созданы ранее
+
+  // пример для трех кнопок меню:
+  if (this.btnTutorial) {
+    this.btnTutorial.setPosition(safe.centerX - 300, safe.bottom - 120);
+  }
+
+  if (this.btnNewGame) {
+    this.btnNewGame.setPosition(safe.centerX, safe.bottom - 120);
+  }
+
+  if (this.btnSettings) {
+    this.btnSettings.setPosition(safe.centerX + 300, safe.bottom - 120);
+  }
+
+  // пример для кнопок справа сверху
+  if (this.btnMedal) {
+    this.btnMedal.setPosition(safe.right - 60, safe.top + 60);
+  }
+
+  if (this.btnStats) {
+    this.btnStats.setPosition(safe.right - 60, safe.top + 160);
+  }
+}
+
 
   // ---------- background video (DOM) ----------
 
@@ -839,7 +908,7 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
   }
 
   // ---------- Иконки "Награды" и "Статистика" ----------
-  const iconSize = getUIIconSize(this);
+  this.iconSize = getUIIconSize(this);
 
   let xDesign, yDesign;
   if (isSquarish) {
@@ -856,7 +925,7 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
 
   const p = dxy(L, xDesign, yDesign);
 
-  const rewardsIcon = this.add.image(p.x, p.y, 'icon_rewards')
+  this.rewardsIcon = this.add.image(p.x, p.y, 'icon_rewards')
     .setOrigin(0.5)
     .setDepth(50)
     .setScrollFactor(0);
