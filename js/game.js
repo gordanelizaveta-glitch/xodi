@@ -2813,9 +2813,35 @@ createGameTimerUI() {
 layoutGameTimerUI() {
   if (!this.gameTimerText) return;
 
-  this.gameTimerText.setOrigin(0, 0);
-  this.gameTimerText.setPosition(0, 0);
+  const W = this.scale.gameSize ? this.scale.gameSize.width : this.scale.width;
+  const H = this.scale.gameSize ? this.scale.gameSize.height : this.scale.height;
+
+  const aspect = Math.max(W, H) / Math.min(W, H);
+  const isSquarish = (aspect <= 1.25);
+
+  const padX = Math.round(Phaser.Math.Clamp(
+    W * (isSquarish ? 0.09 : 0.06),
+    60,
+    160
+  ));
+
+  const padY = Math.round(Phaser.Math.Clamp(
+    H * 0.06,
+    60,
+    160
+  ));
+
+  const shiftLeft = 20; // ← попробуй 20, это точно будет видно
+
+  if (this._bottomUiY) {
+    this.gameTimerText.setOrigin(0, 0.5);
+    this.gameTimerText.setPosition(padX - shiftLeft, this._bottomUiY);
+  } else {
+    this.gameTimerText.setOrigin(0, 0);
+    this.gameTimerText.setPosition(padX - shiftLeft, padY);
+  }
 }
+
 
 
 startGameTimerUI() {
