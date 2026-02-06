@@ -35,8 +35,9 @@ const DESIGN_LANDSCAPE = { w: 1920, h: 1080 };
 
 
 // ===== CARD & PADDING (дизайн-значения) =====
-const CARD_W = 90;
-const CARD_H = 130;
+const CARD_SIZE_MUL = 1.07; // +7% к картам и связанным расстояниям
+const CARD_W = Math.round(90 * CARD_SIZE_MUL);
+const CARD_H = Math.round(130 * CARD_SIZE_MUL);
 const PADDING = 16;
 
 // ===== WIN AUDIO VOLUMES =====
@@ -215,8 +216,8 @@ const config = {
 backgroundColor: 'rgba(0,0,0,0)',
 
   scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    mode: Phaser.Scale.NONE,
+    autoCenter: Phaser.Scale.NO_CENTER,
 
     // базовый размер, дальше Phaser сам ресайзит
     width: 1920,
@@ -1915,41 +1916,36 @@ computeLayoutParams() {
   const W = this.scale.width;
   const H = this.scale.height;
 
-  // Десктоп-версия: делаем поле и карты крупнее примерно на 15%
-  const MUL = 1.15;
-
   // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
-  this.PADDING = Math.round(Math.max(8, W * 0.02) * MUL);
+  this.PADDING = Math.round(Math.max(8, W * 0.02));
 
-  // базовый gap
-  const gapBase = Math.round(Math.max(6, W * 0.01) * MUL);
+  // базовый gap (не привязываем к cardW, чтобы не раздувать на мобилке)
+  const gapBase = Math.round(Math.max(6, W * 0.01));
   this.COL_GAP = gapBase;
 
   // считаем cardW так, чтобы 7 колонок гарантированно влезли
   const availableW = W - this.PADDING * 2 - this.COL_GAP * 6;
   let cardW = Math.floor(availableW / 7);
 
-  // страховочные границы (увеличили максимум ~ на 15%)
-  const maxCardW = Math.round(110 * MUL);
-  cardW = Phaser.Math.Clamp(cardW, 48, maxCardW);
+  // страховочные границы
+  cardW = Phaser.Math.Clamp(cardW, 48, 110);
 
   this.CARD_W = cardW;
   this.CARD_H = Math.round(this.CARD_W * 1.44);
 
-  // шаги
+  // шаги всегда одни и те же (никаких портретных коэффициентов)
   const downMul = 0.15;
   const upMul   = 0.18;
 
   this.TABLEAU_STEP_DOWN = Math.round(Math.max(10, this.CARD_H * downMul));
   this.TABLEAU_STEP_UP   = Math.round(Math.max(12, this.CARD_H * upMul));
 
-  // слоты (чуть крупнее)
-  this.SLOT_INSET = Math.round(6 * MUL);
-  this.SLOT_LINE = Math.max(2, Math.round(2 * MUL));
-  this.SLOT_RADIUS = Math.round(20 * MUL);
+  // слоты (без портретных правок)
+  this.SLOT_INSET = 6;
+  this.SLOT_LINE = 2;
+  this.SLOT_RADIUS = 20;
 }
-
-
+}
   // ====== create ======
 create() {
   try { sessionStorage.setItem('last_scene', 'game'); } catch (e) {}
@@ -4713,17 +4709,49 @@ config.scene = [Boot, LoadingScene, MenuScene, TutorialScene, SettingsScene, Gam
 // 1️⃣ СНАЧАЛА объявляем game
 let game = null;
 
-// 2️⃣ СРАЗУ ПОСЛЕ — глобальная функция refreshBounds
-function refreshBounds() {
-  if (!game || !game.scale || !game.canvas) return;
+// 2️⃣ СРАЗУ ПОСЛЕ — letterbox + refreshBounds
+function applyLetterbox() {
+  const g = window.__phaserGame || game;
+  if (!g || !g.canvas) return;
 
-  try {
-    game.scale.refresh();
-  } catch (e) {
-    // на раннем старте Phaser canvas может быть еще не готов
-  }
+  const DW = 1920;
+  const DH = 1080;
+
+  const container = document.getElementById('game-container') || document.body;
+
+  const vv = window.visualViewport;
+  const cw = vv ? Math.floor(vv.width) : (container.clientWidth || window.innerWidth || DW);
+  const ch = vv ? Math.floor(vv.height) : (container.clientHeight || window.innerHeight || DH);
+
+  const scale = Math.min(cw / DW, ch / DH);
+
+  const displayW = Math.floor(DW * scale);
+  const displayH = Math.floor(DH * scale);
+
+  const canvas = g.canvas;
+  canvas.style.width = displayW + 'px';
+  canvas.style.height = displayH + 'px';
+
+  canvas.style.position = 'absolute';
+  canvas.style.left = '50%';
+  canvas.style.top = '50%';
+  canvas.style.transform = 'translate(-50%, -50%)';
 }
 
+// делаем доступным для index.html (setVh дергает это)
+window.__applyLetterbox = applyLetterbox;
+
+function refreshBounds() {
+  const g = window.__phaserGame || game;
+  if (!g) return;
+
+  try { applyLetterbox(); } catch (e) {}
+
+  // обновляем математику кликов Phaser
+  if (g.scale && g.scale.refresh) {
+    try { g.scale.refresh(); } catch (e) {}
+  }
+}
 // 3️⃣ ПОТОМ startPhaser
 function startPhaser() {
   if (game) return;
@@ -4740,7 +4768,9 @@ function startPhaser() {
   setTimeout(refreshBounds, 0);
 
   window.addEventListener('resize', refreshBounds);
+  window.addEventListener('scroll', refreshBounds, { passive: true });
 }
+
 
 
 (async () => {
@@ -4759,7 +4789,3 @@ function startPhaser() {
   } catch (e) {}
 })();
 
-
-// на всякий случай
-window.addEventListener('resize', refreshBounds);
-window.addEventListener('scroll', refreshBounds, { passive: true });
