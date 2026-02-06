@@ -1888,139 +1888,137 @@ computeLayoutParams() {
 
   // ====== create ======
 create() {
-
   this.cameras.main.roundPixels = true;
 
-// ===== ПАУЗА ТАЙМЕРА ПРИ СВОРАЧИВАНИИ ОКНА =====
-
-const pauseIfActive = () => {
-  if (window.Session && typeof window.Session.pause === 'function') window.Session.pause();
-  this.pauseGameTimerUI();
-};
-
-const resumeIfActive = () => {
-  if (!this._isGameActive) return;
-  if (window.Session && typeof window.Session.resume === 'function') window.Session.resume();
-  this.resumeGameTimerUI();
-};
-
-this._onVisibilityChange = () => {
-  if (document.hidden) pauseIfActive();
-  else resumeIfActive();
-};
-
-this._onBlur = () => pauseIfActive();
-this._onFocus = () => resumeIfActive();
-
-this._onPageHide = () => pauseIfActive();
-this._onPageShow = () => resumeIfActive();
-
-this._onFreeze = () => pauseIfActive();
-this._onResume = () => resumeIfActive();
-
-document.addEventListener('visibilitychange', this._onVisibilityChange);
-window.addEventListener('blur', this._onBlur);
-window.addEventListener('focus', this._onFocus);
-window.addEventListener('pagehide', this._onPageHide);
-window.addEventListener('pageshow', this._onPageShow);
-document.addEventListener('freeze', this._onFreeze);
-document.addEventListener('resume', this._onResume);
-
-this.events.once('shutdown', () => {
-  document.removeEventListener('visibilitychange', this._onVisibilityChange);
-  window.removeEventListener('blur', this._onBlur);
-  window.removeEventListener('focus', this._onFocus);
-  window.removeEventListener('pagehide', this._onPageHide);
-  window.removeEventListener('pageshow', this._onPageShow);
-  document.removeEventListener('freeze', this._onFreeze);
-  document.removeEventListener('resume', this._onResume);
-});
-
-
-
-    this.loadSettings();
-    this.computeLayoutParams();
-    this.buildLayout();
-
-    this.createBackground();
-    this.createSlotsGraphics();
-    this.createUIButtons();
-    this.createGameTimerUI();
-
-    this.createInputHandlers();
-    this.input.setTopOnly(true);
-
-    this.newGame();
-
-    this.scale.on('resize', this.onResize, this);
-
-const fixAfterFullscreen = () => {
-  // обновить размеры/позицию canvas в DOM
-  if (this.scale && typeof this.scale.refresh === 'function') {
-    this.scale.refresh();
+  // --- фикс базового размера (один раз) ---
+  // чтобы во ВК не "прыгали" размеры карт/слотов из-за дергания iframe
+  if (!this._baseW || !this._baseH) {
+    this._baseW = this.scale.width;
+    this._baseH = this.scale.height;
   }
 
-  // ВАЖНО: updateBounds находится в ScaleManager
-  if (this.scale && typeof this.scale.updateBounds === 'function') {
-    this.scale.updateBounds();
-  }
+  // ===== ПАУЗА ТАЙМЕРА ПРИ СВОРАЧИВАНИИ ОКНА =====
+  const pauseIfActive = () => {
+    if (window.Session && typeof window.Session.pause === 'function') window.Session.pause();
+    this.pauseGameTimerUI();
+  };
 
-  // пересчет лейаута + хитбоксов
-  this.onResize();
-  this.updateStockHitArea?.();
-};
+  const resumeIfActive = () => {
+    if (!this._isGameActive) return;
+    if (window.Session && typeof window.Session.resume === 'function') window.Session.resume();
+    this.resumeGameTimerUI();
+  };
 
+  this._onVisibilityChange = () => {
+    if (document.hidden) pauseIfActive();
+    else resumeIfActive();
+  };
 
-this.scale.on('enterfullscreen', () => {
-  this.time.delayedCall(150, fixAfterFullscreen);
-});
+  this._onBlur = () => pauseIfActive();
+  this._onFocus = () => resumeIfActive();
 
-    this.scale.on('enterfullscreen', () => {
-    this.time.delayedCall(0, () => this.updateStockHitArea());
-    });
+  this._onPageHide = () => pauseIfActive();
+  this._onPageShow = () => resumeIfActive();
 
-    this.scale.on('leavefullscreen', () => {
-    this.time.delayedCall(0, () => this.updateStockHitArea());
-    });
+  this._onFreeze = () => pauseIfActive();
+  this._onResume = () => resumeIfActive();
 
+  document.addEventListener('visibilitychange', this._onVisibilityChange);
+  window.addEventListener('blur', this._onBlur);
+  window.addEventListener('focus', this._onFocus);
+  window.addEventListener('pagehide', this._onPageHide);
+  window.addEventListener('pageshow', this._onPageShow);
+  document.addEventListener('freeze', this._onFreeze);
+  document.addEventListener('resume', this._onResume);
 
-    this.events.once('shutdown', this.onShutdown, this);
-    this.events.once('destroy', this.onShutdown, this);
-
-    // --- Card SFX state ---
-    const saved = JSON.parse(localStorage.getItem('solitaire-settings') || '{}');
-    this.sfxEnabled = saved.soundOn !== undefined ? saved.soundOn : true;
-
-    // разлочено ли аудио (после первого клика)
-    this.audioUnlocked = !!this.game.audioUnlocked;
-
-    // создаем звуки (но играть будем только если enabled + unlocked)
-    this.sndCardPick = this.sound.add('klikcard', { volume: 0.6 });
-    this.sndCardPlace = this.sound.add('klakcard', { volume: 0.6 });
-
-    // слушаем смену тумблера Sounds из настроек
-    this.game.events.on('sfx:setEnabled', (v) => {
-    this.sfxEnabled = !!v;
-
-    if (typeof attachDebugKeys === 'function') attachDebugKeys();
-
+  this.events.once('shutdown', () => {
+    document.removeEventListener('visibilitychange', this._onVisibilityChange);
+    window.removeEventListener('blur', this._onBlur);
+    window.removeEventListener('focus', this._onFocus);
+    window.removeEventListener('pagehide', this._onPageHide);
+    window.removeEventListener('pageshow', this._onPageShow);
+    document.removeEventListener('freeze', this._onFreeze);
+    document.removeEventListener('resume', this._onResume);
   });
 
-  
+  // --- init/layout ---
+  this.loadSettings();
+  this.computeLayoutParams();
+  this.buildLayout();
 
-// слушаем глобальную разлочку от первого клика (MusicScene эмитит)
-this.game.events.on('audio:unlocked', () => {
-  this.audioUnlocked = true;
-});
+  this.createBackground();
+  this.createSlotsGraphics();
+  this.createUIButtons();
+  this.createGameTimerUI();
 
-// ---- win audio objects (создаем один раз) ----
-if (!this.winMusic) {
-  this.winMusic = this.sound.add('winmusic', { loop: false, volume: WIN_MUSIC_VOLUME });
-}
-if (!this.winVoice) {
-  this.winVoice = this.sound.add('winvoice', { loop: false, volume: WIN_VOICE_VOLUME });
-}
+  this.createInputHandlers();
+  this.input.setTopOnly(true);
+
+  this.newGame();
+
+  // --- resize hooks ---
+  this.scale.on('resize', this.onResize, this);
+
+  const fixAfterFullscreen = () => {
+    // обновить размеры/позицию canvas в DOM
+    if (this.scale && typeof this.scale.refresh === 'function') {
+      this.scale.refresh();
+    }
+    // updateBounds находится в ScaleManager
+    if (this.scale && typeof this.scale.updateBounds === 'function') {
+      this.scale.updateBounds();
+    }
+
+    // пересчет лейаута + хитбоксов
+    this.onResize();
+    if (typeof this.updateStockHitArea === 'function') this.updateStockHitArea();
+  };
+
+  // НЕ делаем два enterfullscreen - оставляем один
+  this.scale.on('enterfullscreen', () => {
+    this.time.delayedCall(150, fixAfterFullscreen);
+  });
+
+  this.scale.on('leavefullscreen', () => {
+    this.time.delayedCall(0, () => {
+      if (typeof this.updateStockHitArea === 'function') this.updateStockHitArea();
+    });
+  });
+
+  this.events.once('shutdown', this.onShutdown, this);
+  this.events.once('destroy', this.onShutdown, this);
+
+  // --- Card SFX state ---
+  const saved = JSON.parse(localStorage.getItem('solitaire-settings') || '{}');
+  this.sfxEnabled = saved.soundOn !== undefined ? saved.soundOn : true;
+
+  // разлочено ли аудио (после первого клика)
+  this.audioUnlocked = !!this.game.audioUnlocked;
+
+  // создаем звуки (но играть будем только если enabled + unlocked)
+  this.sndCardPick = this.sound.add('klikcard', { volume: 0.6 });
+  this.sndCardPlace = this.sound.add('klakcard', { volume: 0.6 });
+
+  // слушаем смену тумблера Sounds из настроек
+  this.game.events.on('sfx:setEnabled', (v) => {
+    this.sfxEnabled = !!v;
+    if (typeof attachDebugKeys === 'function') attachDebugKeys();
+  });
+
+  // слушаем глобальную разлочку от первого клика (MusicScene эмитит)
+  this.game.events.on('audio:unlocked', () => {
+    this.audioUnlocked = true;
+  });
+
+  // ---- win audio objects (создаем один раз) ----
+  if (!this.winMusic) {
+    this.winMusic = this.sound.add('winmusic', { loop: false, volume: WIN_MUSIC_VOLUME });
   }
+  if (!this.winVoice) {
+    this.winVoice = this.sound.add('winvoice', { loop: false, volume: WIN_VOICE_VOLUME });
+  }
+}
+
 
   getAudioSettings() {
   // берем настройки единообразно
@@ -2089,11 +2087,16 @@ stopWinAudio() {
     this.draw3 = !!saved.draw3; // true = draw 3
   }
 
-  // ====== layout ======
+// ====== layout ======
 buildLayout() {
   const W = this.scale.width;
   const H = this.scale.height;
 
+  // "стабильные" размеры для расчетов, которые не должны прыгать во ВК
+  const EW = Math.min(W, this._baseW || W);
+  const EH = Math.min(H, this._baseH || H);
+
+  // ВАЖНО: X-позиции считаем от реального W, чтобы центрирование всегда было правильным
   const totalTableauW = 7 * this.CARD_W + 6 * this.COL_GAP;
   const leftX = Math.round((W - totalTableauW) / 2);
 
@@ -2120,7 +2123,8 @@ buildLayout() {
   this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2) + topRowDown;
 
   // поле (tableau)
-  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown;
+  // ВАЖНО: берем EH, чтобы высотные коэффициенты не прыгали из-за дерганий H во ВК
+  const TABLEAU_EXTRA_DOWN = Math.round(EH * 0.08) + tableauMoreDown;
 
   this.pos.tableauY =
     this.pos.topY +
@@ -2129,14 +2133,16 @@ buildLayout() {
     Math.round(this.CARD_H / 2) +
     TABLEAU_EXTRA_DOWN;
 
-  // фиксированный ограничитель (без isMobilePortrait)
+  // фиксированный ограничитель
   const clampK = 0.35;
 
+  // ВАЖНО: и тут EH, чтобы ограничитель не "плавал"
   this.pos.tableauY = Math.min(
     this.pos.tableauY,
-    Math.round(H * clampK) + TABLEAU_EXTRA_DOWN
+    Math.round(EH * clampK) + TABLEAU_EXTRA_DOWN
   );
 }
+
 
 
   onResize() {
