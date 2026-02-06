@@ -209,54 +209,21 @@ function writeSettingsSafe(partial) {
 
 
 const config = {
-  type: Phaser.ENVELOP,
+  type: Phaser.AUTO,
   parent: 'game-container',
   transparent: true,
 backgroundColor: 'rgba(0,0,0,0)',
 
   scale: {
-  mode: Phaser.Scale.ENVELOP,
-  autoCenter: Phaser.Scale.CENTER_BOTH,
-  width: 1280,
-  height: 720
-},
+    mode: Phaser.Scale.NONE,
+    autoCenter: Phaser.Scale.NO_CENTER,
+
+    // базовый размер, дальше Phaser сам ресайзит
+    width: 1920,
+    height: 1080
+  },
   scene: []
 };
-
-function getSafeBounds(scene, margin = 24) {
-  const scale = scene.scale;
-
-  const gameW = scale.gameSize.width;
-  const gameH = scale.gameSize.height;
-
-  // реальные CSS размеры canvas и родителя (iframe)
-  const dispW = scale.displaySize.width;
-  const dispH = scale.displaySize.height;
-
-  const parentW = scale.parentSize ? scale.parentSize.width : dispW;
-  const parentH = scale.parentSize ? scale.parentSize.height : dispH;
-
-  // во сколько раз canvas масштабирован относительно "игровых" единиц
-  const sx = dispW / gameW;
-  const sy = dispH / gameH;
-
-  // сколько обрезано с каждой стороны в мировых координатах
-  const cropX = Math.max(0, (dispW - parentW) / sx / 2);
-  const cropY = Math.max(0, (dispH - parentH) / sy / 2);
-
-  const left = cropX + margin;
-  const right = gameW - cropX - margin;
-  const top = cropY + margin;
-  const bottom = gameH - cropY - margin;
-
-  return {
-    left, right, top, bottom,
-    centerX: (left + right) / 2,
-    centerY: (top + bottom) / 2,
-    width: right - left,
-    height: bottom - top
-  };
-}
 
 
 // ===== Rewards (HTML overlay) helpers =====
@@ -617,9 +584,6 @@ if (forceMenu) {
   }
 }
 
-  this.layoutUI();
-
-
     // фон + UI
     this.createBackgroundVideo();
     this.createUI();
@@ -722,37 +686,6 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
   });
 }
 
-layoutUI() {
-  const safe = getSafeBounds(this, 40);
-
-  // ↓↓↓ ВАЖНО ↓↓↓
-  // Тут ты просто ДВИГАЕШЬ кнопки,
-  // которые УЖЕ созданы ранее
-
-  // пример для трех кнопок меню:
-  if (this.btnTutorial) {
-    this.btnTutorial.setPosition(safe.centerX - 300, safe.bottom - 120);
-  }
-
-  if (this.btnNewGame) {
-    this.btnNewGame.setPosition(safe.centerX, safe.bottom - 120);
-  }
-
-  if (this.btnSettings) {
-    this.btnSettings.setPosition(safe.centerX + 300, safe.bottom - 120);
-  }
-
-  // пример для кнопок справа сверху
-  if (this.btnMedal) {
-    this.btnMedal.setPosition(safe.right - 60, safe.top + 60);
-  }
-
-  if (this.btnStats) {
-    this.btnStats.setPosition(safe.right - 60, safe.top + 160);
-  }
-}
-
-
   // ---------- background video (DOM) ----------
 
 
@@ -797,10 +730,9 @@ layoutUI() {
   if (this.ui && this.ui.rewardsIcon) { try { this.ui.rewardsIcon.destroy(); } catch (e) {} this.ui.rewardsIcon = null; }
   if (this.ui && this.ui.statsIcon) { try { this.ui.statsIcon.destroy(); } catch (e) {} this.ui.statsIcon = null; }
 
-  // ВАЖНО: берем игровые размеры (а не размеры DOM)
-  const W = this.scale.gameSize ? this.scale.gameSize.width : this.scale.width;
-  const H = this.scale.gameSize ? this.scale.gameSize.height : this.scale.height;
-  const cx = W / 2;
+  const W = this.scale.width;
+  const H = this.scale.height;
+  const cx = this.cameras.main.centerX;
 
   const isSmallScreen = (Math.min(W, H) <= 600);
 
@@ -808,6 +740,8 @@ layoutUI() {
   const aspect = Math.max(W, H) / Math.min(W, H);
   const isSquarish = (aspect <= 1.25);
   const useVerticalButtons = isSquarish;
+
+  const L = getLayout(this);
 
   const minSide = Math.min(W, H);
   const S = minSide;
@@ -818,37 +752,27 @@ layoutUI() {
   if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
   if (isSquarish) btnScale *= 1.05;
 
-  // ---- SAFE ОТСТУПЫ (чтобы не резалось ENVELOP в VK) ----
-  // Чем меньше окно и чем "квадратнее" - тем больше отступ
-  const padX = Math.round(Phaser.Math.Clamp(W * (isSquarish ? 0.12 : 0.08), 90, 220));
-  const padY = Math.round(Phaser.Math.Clamp(H * (isSquarish ? 0.10 : 0.07), 70, 180));
-
-  const left = padX;
-  const right = W - padX;
-  const top = padY;
-  const bottom = H - padY;
-
-  const innerW = right - left;
-
   // ---------- 3 кнопки ----------
   const t = (k, fallback) =>
     (window.APP && window.APP.i18n && window.APP.i18n.t ? window.APP.i18n.t(k) : fallback);
 
   if (useVerticalButtons) {
     const spacingBase = isSquarish ? 200 : 80;
-    const spacing = Math.round(spacingBase * (Math.min(W, H) / 900));
+    const spacing = Math.round(spacingBase * L.s);
 
-    // ставим ближе к низу, но внутри safe
-    let startY = Math.round(bottom - spacing * 2);
+    let startY = Math.round(H * 0.66);
 
-    // защита от слишком низко/высоко
-    const topLimit = Math.round(top + H * 0.18);
+    const bottomLimit = Math.round(H * 0.88);
+    const lastY = startY + spacing * 2;
+    if (lastY > bottomLimit) startY -= (lastY - bottomLimit);
+
+    const topLimit = Math.round(H * 0.34);
     if (startY < topLimit) startY = topLimit;
 
-    // кнопки строго по центру
     this.createButton(cx, startY, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
       if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
 
+      // НЕ показываем рекламу на первую партию за запуск
       if (!window.__ad_skip_first_party_done) {
         window.__ad_skip_first_party_done = true;
         this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
@@ -878,22 +802,19 @@ layoutUI() {
     }, btnScale);
 
   } else {
-    // Горизонтальные кнопки, но НЕ у края
-    // Вместо "cx ± 0.28W" раскладываем внутри safe-зоны
+    const spacingX = Math.round(Phaser.Math.Clamp(W * 0.28, 260, 420));
+
     let y = Math.round(H * 0.70);
-    y = Phaser.Math.Clamp(y, Math.round(top + H * 0.35), Math.round(bottom - H * 0.12));
+    if (y > Math.round(H * 0.82)) y = Math.round(H * 0.78);
 
-    const x1 = left + innerW * 0.18;
-    const x2 = left + innerW * 0.50;
-    const x3 = left + innerW * 0.82;
-
-    this.createButton(x1, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
+    this.createButton(cx - spacingX, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
       this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
     }, btnScale);
 
-    this.createButton(x2, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
+    this.createButton(cx, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
       if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
 
+      // НЕ показываем рекламу на первую партию за запуск
       if (!window.__ad_skip_first_party_done) {
         window.__ad_skip_first_party_done = true;
         this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
@@ -914,27 +835,36 @@ layoutUI() {
       }
     }, btnScale);
 
-    this.createButton(x3, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
+    this.createButton(cx + spacingX, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
       this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
     }, btnScale);
   }
 
   // ---------- Иконки "Награды" и "Статистика" ----------
   const iconSize = getUIIconSize(this);
-  this.iconSize = iconSize;
 
-  // Иконки справа сверху, но внутри safe-зоны
-  const iconPad = Math.round(Phaser.Math.Clamp(iconSize * 0.65, 44, 90));
-  const iconX = right - iconPad;
-  const iconY = top + iconPad;
+  let xDesign, yDesign;
+  if (isSquarish) {
+    const padX = Math.round(Phaser.Math.Clamp(L.DW * 0.06, 40, 70));
+    const padY = 480;
+    xDesign = L.DW - padX;
+    yDesign = padY;
+  } else {
+    const padX = 92;
+    const padY = 92;
+    xDesign = L.DW - padX;
+    yDesign = padY;
+  }
 
-  const rewardsIcon = this.add.image(iconX, iconY, 'icon_rewards')
+  const p = dxy(L, xDesign, yDesign);
+
+  const rewardsIcon = this.add.image(p.x, p.y, 'icon_rewards')
     .setOrigin(0.5)
     .setDepth(50)
     .setScrollFactor(0);
 
   applyRoundIcon(this, rewardsIcon, iconSize, 1.35);
-  rewardsIcon.setInteractive({ useHandCursor: true });
+  rewardsIcon.input.useHandCursor = true;
   this.ui.rewardsIcon = rewardsIcon;
 
   let restScale = rewardsIcon._baseScale || rewardsIcon.scale;
@@ -1056,7 +986,7 @@ layoutUI() {
     });
   });
 
-  // Статистика под наградами (тоже внутри safe)
+  // Статистика под наградами
   const gap = isSmallScreen ? 1.10 : 1.25;
   const statsY = rewardsIcon.y + Math.round(iconSize * gap);
 
@@ -1066,7 +996,7 @@ layoutUI() {
     .setScrollFactor(0);
 
   applyRoundIcon(this, statsIcon, iconSize, 1.35);
-  statsIcon.setInteractive({ useHandCursor: true });
+  statsIcon.input.useHandCursor = true;
   this.ui.statsIcon = statsIcon;
 
   const statsRestScale = statsIcon.scale;
@@ -1093,7 +1023,6 @@ layoutUI() {
     this.tweens.add({ targets: statsIcon, scale: statsRestScale * 0.92, duration: 90, ease: 'Power1' });
   });
 }
-
 
   openStatsPopup() {
     if (this._statsPopupOpen) return;
@@ -2668,30 +2597,24 @@ buildLayout() {
 }
 
 layoutUI() {
-  // Берем игровые размеры (внутренние), а не DOM
-  const W = this.scale.gameSize ? this.scale.gameSize.width : this.scale.width;
-  const H = this.scale.gameSize ? this.scale.gameSize.height : this.scale.height;
+  const W = this.scale.width;
+  const H = this.scale.height;
+  const pad = Math.round(Math.max(10, Math.min(W, H) * 0.03));
 
-  // Насколько "квадратно" окно - в таких случаях ENVELOP режет сильнее
-  const aspect = Math.max(W, H) / Math.min(W, H);
-  const isSquarish = (aspect <= 1.25);
-  const isSmallScreen = (Math.min(W, H) <= 600);
-
-  // SAFE отступы: чем "квадратнее" и меньше экран - тем больше
-  const padX = Math.round(Phaser.Math.Clamp(W * (isSquarish ? 0.12 : 0.08), 70, 220));
-  const padY = Math.round(Phaser.Math.Clamp(H * (isSquarish ? 0.10 : 0.07), 60, 200));
-
-  const left = padX;
-  const right = W - padX;
-  const top = padY;
-  const bottom = H - padY;
+  const dev = this.sys.game.device;
 
   // ===== РАЗМЕР КНОПОК =====
   let baseSize = Math.round(Math.min(105, W * 0.09));
-  let sizeMul = 1.0;
-  if (isSmallScreen) sizeMul = 1.15;
 
-  const btnSize = Math.round(baseSize * sizeMul);
+   let sizeMul = 1.0;
+
+// опционально: чуть крупнее на реально маленьких экранах, но не портрет
+   const isSmallScreen = (Math.min(W, H) <= 600);
+   if (isSmallScreen) sizeMul = 1.15;
+
+   const btnSize = Math.round(baseSize * sizeMul);
+
+
 
   // аккуратный ресайз без искажения пропорций
   const setBtnHeight = (img, hPx) => {
@@ -2699,20 +2622,23 @@ layoutUI() {
     const tex = img.texture && img.texture.getSourceImage ? img.texture.getSourceImage() : null;
     const iw = (tex && tex.width) ? tex.width : (img.width || 1);
     const ih = (tex && tex.height) ? tex.height : (img.height || 1);
+
     const sc = hPx / ih;
     img.setDisplaySize(Math.round(iw * sc), Math.round(ih * sc));
   };
 
+  // обычные кнопки: высота = btnSize, ширина по пропорциям
   setBtnHeight(this.ui && this.ui.home, btnSize);
   setBtnHeight(this.ui && this.ui.settings, btnSize);
   setBtnHeight(this.ui && this.ui.undo, btnSize);
 
   // restart - вытянутая
   if (this.ui && this.ui.restart) {
-    const h = Math.round(btnSize * 0.85);
-    const w = Math.round(btnSize * 1.25);
-    this.ui.restart.setDisplaySize(w, h);
+  const h = Math.round(btnSize * 0.85);
+  const w = Math.round(btnSize * 1.25);
+  this.ui.restart.setDisplaySize(w, h);
   }
+
 
   // актуальные размеры после ресайза
   const homeW = (this.ui && this.ui.home) ? this.ui.home.displayWidth : btnSize;
@@ -2729,54 +2655,52 @@ layoutUI() {
 
   const gap = Math.round(btnSize * 0.25);
 
-  // ===== ПОЗИЦИИ (внутри safe-зоны) =====
-  const btnHome = this.ui && this.ui.home;
-  const btnSound = this.ui && this.ui.settings;
-  const btnUndo = this.ui && this.ui.undo;
-  const btnRestart = this.ui && this.ui.restart;
+  // ===== ПОЗИЦИИ =====
 
-  // Справа сверху: HOME
-  if (btnHome) {
-    btnHome.setPosition(
-      right - homeW * 0.5,
-      top + homeH * 0.5
-    );
-  }
+// кнопки
+const btnHome = this.ui && this.ui.home;
+const btnSound = this.ui && this.ui.settings; // это звук
+const btnUndo = this.ui && this.ui.undo;
+const btnRestart = this.ui && this.ui.restart;
 
-  // Под HOME: SOUND
-  if (btnSound) {
-    btnSound.setPosition(
-      right - settingsW * 0.5,
-      top + homeH + gap + settingsH * 0.5
-    );
-  }
+const topY = pad;
+const rightX = W - pad;
 
-  // Слева снизу: RESTART
-  if (btnRestart) {
-    btnRestart.setPosition(
-      left + restartW * 0.5,
-      bottom - restartH * 0.5
-    );
-  }
+const bottomY = H - pad;
+const leftX = pad;
 
-  // Справа от RESTART: UNDO
-  if (btnUndo) {
-    btnUndo.setPosition(
-      left + restartW + gap + undoW * 0.5,
-      bottom - undoH * 0.5
-    );
-  }
-
-  // После изменения layout нужно обновить "базу" для hover-анимаций
-  if (this._uiBase && this.ui) {
-    for (const k of ['home', 'settings', 'undo', 'restart']) {
-      const btn = this.ui[k];
-      if (!btn) continue;
-      if (btn.__saveBase) btn.__saveBase();
-    }
-  }
+// Справа сверху: HOME
+if (btnHome) {
+  btnHome.setPosition(
+    rightX - homeW * 0.5,
+    topY + homeH * 0.5
+  );
 }
 
+// Под HOME: SOUND
+if (btnSound) {
+  btnSound.setPosition(
+    rightX - settingsW * 0.5,
+    topY + homeH + gap + settingsH * 0.5
+  );
+}
+
+// Слева снизу: RESTART
+if (btnRestart) {
+  btnRestart.setPosition(
+    leftX + restartW * 0.5,
+    bottomY - restartH * 0.5
+  );
+}
+
+// Справа от RESTART, на той же высоте: UNDO
+if (btnUndo) {
+  btnUndo.setPosition(
+    leftX + restartW + gap + undoW * 0.5,
+    bottomY - undoH * 0.5
+  );
+}
+}
 
 
   
@@ -2813,35 +2737,17 @@ createGameTimerUI() {
 layoutGameTimerUI() {
   if (!this.gameTimerText) return;
 
-  const W = this.scale.gameSize ? this.scale.gameSize.width : this.scale.width;
-  const H = this.scale.gameSize ? this.scale.gameSize.height : this.scale.height;
-
-  const aspect = Math.max(W, H) / Math.min(W, H);
-  const isSquarish = (aspect <= 1.25);
-
-  const padX = Math.round(Phaser.Math.Clamp(
-    W * (isSquarish ? 0.09 : 0.06),
-    60,
-    160
-  ));
-
-  const padY = Math.round(Phaser.Math.Clamp(
-    H * 0.06,
-    60,
-    160
-  ));
-
-  const shiftLeft = 20; // ← попробуй 20, это точно будет видно
+  const W = this.scale.width;
+  const pad = Math.round(Math.max(10, W * 0.02));
 
   if (this._bottomUiY) {
     this.gameTimerText.setOrigin(0, 0.5);
-    this.gameTimerText.setPosition(padX - shiftLeft, this._bottomUiY);
+    this.gameTimerText.setPosition(pad, this._bottomUiY);
   } else {
     this.gameTimerText.setOrigin(0, 0);
-    this.gameTimerText.setPosition(padX - shiftLeft, padY);
+    this.gameTimerText.setPosition(pad, pad);
   }
 }
-
 
 
 startGameTimerUI() {
@@ -4799,38 +4705,81 @@ config.scene = [Boot, LoadingScene, MenuScene, TutorialScene, SettingsScene, Gam
 })();
 
 
+
 // 1️⃣ СНАЧАЛА объявляем game
 let game = null;
 
-// 2️⃣ СРАЗУ ПОСЛЕ — глобальная функция refreshBounds
-function refreshBounds() {
+// ===== Letterbox resize (как на Яндексе): 16:9 "вписываем" в любое окно, поля допустимы =====
+function applyLetterbox() {
   if (!game || !game.scale || !game.canvas) return;
 
-  try {
-    game.scale.refresh();
-  } catch (e) {
-    // на раннем старте Phaser canvas может быть еще не готов
-  }
+  const container = document.getElementById('game-container');
+  if (!container) return;
+
+  const sw = Math.max(1, container.clientWidth || 0);
+  const sh = Math.max(1, container.clientHeight || 0);
+
+  const dw = DESIGN_LANDSCAPE.w;
+  const dh = DESIGN_LANDSCAPE.h;
+
+  const s = Math.min(sw / dw, sh / dh);
+
+  const vw = Math.max(1, Math.round(dw * s));
+  const vh = Math.max(1, Math.round(dh * s));
+
+  // ВАЖНО: Phaser будет думать, что "экран" = vw x vh (это и нужно для всех сцен)
+  try { game.scale.resize(vw, vh); } catch (e) {}
+
+  // Канвас физически центруем внутри большого контейнера, чтобы появились поля
+  const canvas = game.canvas;
+  canvas.style.position = 'absolute';
+  canvas.style.width = vw + 'px';
+  canvas.style.height = vh + 'px';
+  canvas.style.left = Math.round((sw - vw) * 0.5) + 'px';
+  canvas.style.top  = Math.round((sh - vh) * 0.5) + 'px';
+  canvas.style.display = 'block';
+
+  // на некоторых браузерах полезно обновить bounds
+  try { game.scale.refresh(); } catch (e) {}
+  try { game.scale.updateBounds(); } catch (e) {}
+
+  // чтобы index.html мог дергать это при setVh
+  window.__phaserLetterbox = { sw, sh, vw, vh, s };
 }
 
-// 3️⃣ ПОТОМ startPhaser
+// alias (чтобы старый код/сцены не падали)
+function refreshBounds() {
+  applyLetterbox();
+}
+
+// делаем доступным для index.html
+window.__applyLetterbox = applyLetterbox;
+
+// ===== startPhaser =====
 function startPhaser() {
   if (game) return;
 
   game = new Phaser.Game(config);
+
   requestAnimationFrame(() => {
-  const el = document.getElementById('boot-loader');
-  if (el) el.style.display = 'none';
-});
+    const el = document.getElementById('boot-loader');
+    if (el) el.style.display = 'none';
+  });
 
   window.__phaserGame = game;
 
   // вызывать ТОЛЬКО после создания canvas
-  setTimeout(refreshBounds, 0);
+  setTimeout(applyLetterbox, 0);
 
-  window.addEventListener('resize', refreshBounds);
+  // слушатели на ресайз
+  window.addEventListener('resize', applyLetterbox);
+  window.addEventListener('orientationchange', applyLetterbox);
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', applyLetterbox);
+    window.visualViewport.addEventListener('scroll', applyLetterbox);
+  }
 }
-
 
 (async () => {
   let initPromise = null;
@@ -4843,12 +4792,9 @@ function startPhaser() {
   startPhaser();
 
   // если нужно - дождемся платформы уже "в фоне"
-  try {
-    await initPromise;
-  } catch (e) {}
+  try { await initPromise; } catch (e) {}
 })();
 
-
 // на всякий случай
-window.addEventListener('resize', refreshBounds);
-window.addEventListener('scroll', refreshBounds, { passive: true });
+window.addEventListener('resize', applyLetterbox);
+window.addEventListener('scroll', applyLetterbox, { passive: true });

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <link rel="preload" as="image" href="assets/backgrounds/loader.jpeg">
+  <link rel="preload" as="image" href="assets/ui/ТВОЙ_ЛОАДЕР.png">
   <meta charset="utf-8" />
   <base href="./">
   <title>Йес Солитер</title>
@@ -16,7 +16,7 @@
       margin: 0;
       padding: 0;
       height: 100%;
-      background: #1e1e1e;
+      background: #E8DAC2;
       color: #fff;
       font-family: Arial, sans-serif;
 
@@ -29,15 +29,14 @@
       overflow: hidden;
     }
 
- #game-container {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: #000;
-  touch-action: none;
+    #game-container {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100vw;
+      height: calc(var(--vh, 1vh) * 100);
+      overflow: hidden;
+      background: #E8DAC2;
 
       touch-action: none;
       -webkit-user-select: none;
@@ -46,10 +45,16 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-#game-container canvas {
-  display: block;
-  /* важно: НИКАКИХ width/height тут не задаем */
-}
+    #game-container canvas {
+      display: block;
+      position: absolute;
+      left: 0;
+      top: 0;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
 
     @font-face {
       font-family: "Cygre ExtraBold";
@@ -292,8 +297,10 @@ if (inRewards) return;
       var h = (window.visualViewport && window.visualViewport.height) ? window.visualViewport.height : window.innerHeight;
       document.documentElement.style.setProperty('--vh', (h * 0.01) + 'px');
 
-      // У тебя игра кладется в window.__phaserGame
-      if (window.__phaserGame && window.__phaserGame.scale) {
+      // Подгоняем letterbox-ресайз (если подключен)
+      if (typeof window.__applyLetterbox === 'function') {
+        try { window.__applyLetterbox(); } catch (e) {}
+      } else if (window.__phaserGame && window.__phaserGame.scale) {
         try { window.__phaserGame.scale.refresh(); } catch (e) {}
       }
     }
@@ -312,4 +319,3 @@ if (inRewards) return;
   <script src="js/game.js"></script>
 </body>
 </html>
-
