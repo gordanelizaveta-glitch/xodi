@@ -2078,7 +2078,7 @@ stopWinAudio() {
     this.draw3 = !!saved.draw3; // true = draw 3
   }
 
-  buildLayout() {
+ buildLayout() {
   const W = this.scale.width;
   const H = this.scale.height;
 
@@ -2100,12 +2100,9 @@ stopWinAudio() {
     this.pos.foundationX[i] = foundationLeftX + i * (this.CARD_W + this.COL_GAP);
   }
 
-  const topRowDown = 0;
-  const tableauMoreDown = 0;
+  this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2);
 
-  this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2) + topRowDown;
-
-  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown;
+  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08);
 
   this.pos.tableauY =
     this.pos.topY +
