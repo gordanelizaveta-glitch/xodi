@@ -749,10 +749,8 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
   const isMobile = this.sys.game.device.os.android || this.sys.game.device.os.iOS;
 
   let btnScale = Phaser.Math.Clamp(S / 900, 0.55, 0.80);
-
-  const menuBtnMul = 1.45; // сделай 1.15 / 1.25 / 1.35 как нравится
-  const menuBtnScale = btnScale * menuBtnMul;
-
+  if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
+  if (isSquarish) btnScale *= 1.05;
 
   // ---------- 3 кнопки ----------
   const t = (k, fallback) =>
@@ -813,8 +811,7 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
 
     this.createButton(cx - spacingX, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
       this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
-    }, menuBtnScale);
-
+    }, btnScale);
 
     this.createButton(cx, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
       if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
@@ -838,12 +835,11 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
       } else {
         doStart();
       }
-    }, menuBtnScale);
-
+    }, btnScale);
 
     this.createButton(cx + spacingX, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
       this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
-    }, menuBtnScale);
+    }, btnScale);
   }
 
   // ---------- Иконки "Награды" и "Статистика" ----------
