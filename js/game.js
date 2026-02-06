@@ -752,6 +752,8 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
 if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
 if (isSquarish) btnScale *= 1.05;
 
+const MENU_BTN_MUL = 1.35; // сделай 1.25 / 1.35 / 1.45
+
   // ---------- 3 кнопки ----------
   const t = (k, fallback) =>
     (window.APP && window.APP.i18n && window.APP.i18n.t ? window.APP.i18n.t(k) : fallback);
@@ -811,7 +813,7 @@ if (isSquarish) btnScale *= 1.05;
 
     this.createButton(cx - spacingX, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
       this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
-    }, btnScale);
+    }, btnScale, MENU_BTN_MUL);
 
     this.createButton(cx, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
       if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
@@ -835,11 +837,12 @@ if (isSquarish) btnScale *= 1.05;
       } else {
         doStart();
       }
-    }, btnScale);
+    }, btnScale, MENU_BTN_MUL);
+
 
     this.createButton(cx + spacingX, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
       this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
-    }, btnScale);
+    }, btnScale, MENU_BTN_MUL);
   }
 
   // ---------- Иконки "Награды" и "Статистика" ----------
