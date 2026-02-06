@@ -1868,7 +1868,7 @@ computeLayoutParams() {
   let cardW = Math.floor(availableW / 7);
 
   // страховочные границы
-  cardW = Phaser.Math.Clamp(cardW, 48, 110);
+  cardW = Phaser.Math.Clamp(cardW, 48, 160);
 
   this.CARD_W = cardW;
   this.CARD_H = Math.round(this.CARD_W * 1.44);
