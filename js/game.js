@@ -210,21 +210,12 @@ function writeSettingsSafe(partial) {
 
 
 const config = {
-  type: Phaser.AUTO,
-  parent: 'game-container',
-  transparent: true,
-backgroundColor: 'rgba(0,0,0,0)',
-
-  scale: {
-    mode: Phaser.Scale.NONE,
-    autoCenter: Phaser.Scale.NO_CENTER,
-
-    // базовый размер, дальше Phaser сам ресайзит
-    width: 1920,
-    height: 1080
-  },
-  scene: []
-};
+width: 1920,
+height: 1080,
+parent: 'game-container',
+scale: { mode: Phaser.Scale.NONE },
+backgroundColor: 'rgba(0,0,0,0)'
+}
 
 
 // ===== Rewards (HTML overlay) helpers =====
@@ -1945,7 +1936,7 @@ computeLayoutParams() {
   this.SLOT_LINE = 2;
   this.SLOT_RADIUS = 20;
 }
-}
+
   // ====== create ======
 create() {
   try { sessionStorage.setItem('last_scene', 'game'); } catch (e) {}
@@ -4757,6 +4748,8 @@ function startPhaser() {
   if (game) return;
 
   game = new Phaser.Game(config);
+  window.__phaserGame = game;
+if (window.__applyLetterbox) window.__applyLetterbox();
   requestAnimationFrame(() => {
   const el = document.getElementById('boot-loader');
   if (el) el.style.display = 'none';
@@ -4789,3 +4782,53 @@ function startPhaser() {
   } catch (e) {}
 })();
 
+(function () {
+  function applyLetterbox() {
+    if (!window.__phaserGame || !window.__phaserGame.canvas) return;
+
+    const DW = 1920;
+    const DH = 1080;
+
+    const container = document.getElementById('game-container') || document.body;
+
+    // В VK это важнее, чем clientWidth/clientHeight
+    const vv = window.visualViewport;
+    const cw = vv ? Math.floor(vv.width) : (container.clientWidth || window.innerWidth);
+    const ch = vv ? Math.floor(vv.height) : (container.clientHeight || window.innerHeight);
+
+    const scale = Math.min(cw / DW, ch / DH);
+
+    const displayW = Math.floor(DW * scale);
+    const displayH = Math.floor(DH * scale);
+
+    const canvas = window.__phaserGame.canvas;
+
+    canvas.style.width = displayW + 'px';
+    canvas.style.height = displayH + 'px';
+    canvas.style.position = 'absolute';
+    canvas.style.left = '50%';
+    canvas.style.top = '50%';
+    canvas.style.transform = 'translate(-50%, -50%)';
+  }
+
+  // чтобы index.html мог дергать
+  window.__applyLetterbox = applyLetterbox;
+
+  // на всякий случай: если resize случился раньше, чем canvas готов
+  function safeApply() {
+    try { applyLetterbox(); } catch (e) {}
+  }
+
+  // ресайз на все возможные события VK/браузера
+  window.addEventListener('resize', safeApply);
+  window.addEventListener('orientationchange', safeApply);
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', safeApply);
+    window.visualViewport.addEventListener('scroll', safeApply);
+  }
+
+  // если игра уже создана - применим сразу
+  setTimeout(safeApply, 0);
+  requestAnimationFrame(safeApply);
+})();
