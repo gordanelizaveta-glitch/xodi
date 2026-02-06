@@ -4750,11 +4750,19 @@ function startPhaser() {
 
   game = new Phaser.Game(config);
   window.__phaserGame = game;
+  // применяем размеры сразу после создания canvas
 if (window.__applyLetterbox) window.__applyLetterbox();
-  requestAnimationFrame(() => {
-  const el = document.getElementById('boot-loader');
-  if (el) el.style.display = 'none';
+
+// и еще раз после первого кадра (самый надежный способ)
+requestAnimationFrame(() => {
+  if (window.__applyLetterbox) window.__applyLetterbox();
 });
+
+// и еще раз чуть позже (на случай, если VK/iframe пересчитает высоту)
+setTimeout(() => {
+  if (window.__applyLetterbox) window.__applyLetterbox();
+}, 50);
+
 
   window.__phaserGame = game;
 
