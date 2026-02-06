@@ -748,13 +748,12 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
 
   const isMobile = this.sys.game.device.os.android || this.sys.game.device.os.iOS;
 
-  // Кнопки больше (и текст тоже, если createButton завязан на scale)
-let btnScale = Phaser.Math.Clamp(S / 760, 0.85, 1.20);
-if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 700, 0.95, 1.35);
-if (isSquarish) btnScale *= 1.05;
+  let btnScale = Phaser.Math.Clamp(S / 900, 0.55, 0.80);
+  if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
+  if (isSquarish) btnScale *= 1.05;
 
-// финальная защита
-btnScale = Phaser.Math.Clamp(btnScale, 0.85, 1.40);
+  const menuBtnMul = 1.25; // сделай 1.15 / 1.25 / 1.35 как нравится
+const menuBtnScale = btnScale * menuBtnMul;
 
 
   // ---------- 3 кнопки ----------
@@ -796,15 +795,17 @@ btnScale = Phaser.Math.Clamp(btnScale, 0.85, 1.40);
       } else {
         doStart();
       }
-    }, btnScale);
+    }, menuBtnScale);
+
 
     this.createButton(cx, startY + spacing, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
       this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
-    }, btnScale);
+    }, menuBtnScale);
+
 
     this.createButton(cx, startY + spacing * 2, t('menu.settings', 'НАСТРОЙКИ'), () => {
       this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
-    }, btnScale);
+    }, menuBtnScale);
 
   } else {
     const spacingX = Math.round(Phaser.Math.Clamp(W * 0.28, 260, 420));
