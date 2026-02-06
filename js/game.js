@@ -210,12 +210,13 @@ function writeSettingsSafe(partial) {
 
 
 const config = {
+type: Phaser.AUTO,
 width: 1920,
 height: 1080,
 parent: 'game-container',
 scale: { mode: Phaser.Scale.NONE },
 backgroundColor: 'rgba(0,0,0,0)'
-}
+};
 
 
 // ===== Rewards (HTML overlay) helpers =====
