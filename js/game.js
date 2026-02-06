@@ -2266,16 +2266,16 @@ buildLayout() {
 
     // create
 
-    this.ui.home = this.add.image(0, 0, 'icon_home').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.35) .setInteractive({ useHandCursor: true }).setDepth(5000);
+    this.ui.home = this.add.image(0, 0, 'icon_home').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.85) .setInteractive({ useHandCursor: true }).setDepth(5000);
     this.ui.settings = this.add.image(0, 0, 'icon_sound')
     .setOrigin(0.5)
-    .setScale(UI_ICON_SCALE * 0.35)
+    .setScale(UI_ICON_SCALE * 0.85)
     .setInteractive({ useHandCursor: true })
     .setDepth(5000);
-    this.ui.undo = this.add.image(0, 0, 'icon_undo').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.35) .setInteractive({ useHandCursor: true }).setDepth(5000);
+    this.ui.undo = this.add.image(0, 0, 'icon_undo').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.85) .setInteractive({ useHandCursor: true }).setDepth(5000);
     this.ui.restart = this.add.image(0, 0, 'icon_restart')
     .setOrigin(0.5)
-    .setScale(UI_ICON_SCALE * 0.35)
+    .setScale(UI_ICON_SCALE * 0.85)
     .setInteractive({ useHandCursor: true })
     .setDepth(5000);
 
