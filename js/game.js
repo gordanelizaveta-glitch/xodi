@@ -1853,8 +1853,9 @@ class GameScene extends Phaser.Scene {
 
   // ====== required by you ======
 computeLayoutParams() {
-  const W = this.scale.width;
-  const H = this.scale.height;
+  const W = this._baseW || this.scale.width;
+const H = this._baseH || this.scale.height;
+
 
   // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
   this.PADDING = Math.round(Math.max(8, W * 0.02));
@@ -2087,16 +2088,10 @@ stopWinAudio() {
     this.draw3 = !!saved.draw3; // true = draw 3
   }
 
-// ====== layout ======
-buildLayout() {
+  buildLayout() {
   const W = this.scale.width;
   const H = this.scale.height;
 
-  // "стабильные" размеры для расчетов, которые не должны прыгать во ВК
-  const EW = Math.min(W, this._baseW || W);
-  const EH = Math.min(H, this._baseH || H);
-
-  // ВАЖНО: X-позиции считаем от реального W, чтобы центрирование всегда было правильным
   const totalTableauW = 7 * this.CARD_W + 6 * this.COL_GAP;
   const leftX = Math.round((W - totalTableauW) / 2);
 
@@ -2115,16 +2110,12 @@ buildLayout() {
     this.pos.foundationX[i] = foundationLeftX + i * (this.CARD_W + this.COL_GAP);
   }
 
-  // НИКАКИХ портретных сдвигов
   const topRowDown = 0;
   const tableauMoreDown = 0;
 
-  // верхняя линия (stock/waste/foundation)
   this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2) + topRowDown;
 
-  // поле (tableau)
-  // ВАЖНО: берем EH, чтобы высотные коэффициенты не прыгали из-за дерганий H во ВК
-  const TABLEAU_EXTRA_DOWN = Math.round(EH * 0.08) + tableauMoreDown;
+  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown;
 
   this.pos.tableauY =
     this.pos.topY +
@@ -2133,15 +2124,14 @@ buildLayout() {
     Math.round(this.CARD_H / 2) +
     TABLEAU_EXTRA_DOWN;
 
-  // фиксированный ограничитель
   const clampK = 0.35;
 
-  // ВАЖНО: и тут EH, чтобы ограничитель не "плавал"
   this.pos.tableauY = Math.min(
     this.pos.tableauY,
-    Math.round(EH * clampK) + TABLEAU_EXTRA_DOWN
+    Math.round(H * clampK) + TABLEAU_EXTRA_DOWN
   );
 }
+
 
 
 
@@ -2272,16 +2262,16 @@ buildLayout() {
 
     // create
 
-    this.ui.home = this.add.image(0, 0, 'icon_home').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.85) .setInteractive({ useHandCursor: true }).setDepth(5000);
+    this.ui.home = this.add.image(0, 0, 'icon_home').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.35) .setInteractive({ useHandCursor: true }).setDepth(5000);
     this.ui.settings = this.add.image(0, 0, 'icon_sound')
     .setOrigin(0.5)
-    .setScale(UI_ICON_SCALE * 0.85)
+    .setScale(UI_ICON_SCALE * 0.35)
     .setInteractive({ useHandCursor: true })
     .setDepth(5000);
-    this.ui.undo = this.add.image(0, 0, 'icon_undo').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.85) .setInteractive({ useHandCursor: true }).setDepth(5000);
+    this.ui.undo = this.add.image(0, 0, 'icon_undo').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.35) .setInteractive({ useHandCursor: true }).setDepth(5000);
     this.ui.restart = this.add.image(0, 0, 'icon_restart')
     .setOrigin(0.5)
-    .setScale(UI_ICON_SCALE * 0.85)
+    .setScale(UI_ICON_SCALE * 0.35)
     .setInteractive({ useHandCursor: true })
     .setDepth(5000);
 
