@@ -2450,7 +2450,9 @@ attachUndoSpin360(this.ui.undo);
 layoutUI() {
   const W = this.scale.width;
   const H = this.scale.height;
-  const pad = Math.round(Math.max(10, Math.min(W, H) * 0.03));
+  const SAFE_W = Math.min(W, H * 1.7);
+
+  const pad = Math.round(Math.max(10, Math.min(SAFE_W, H) * 0.03));
 
   const dev = this.sys.game.device;
 
