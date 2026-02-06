@@ -215,8 +215,8 @@ const config = {
 backgroundColor: 'rgba(0,0,0,0)',
 
   scale: {
-    mode: Phaser.Scale.NONE,
-    autoCenter: Phaser.Scale.NO_CENTER,
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
 
     // базовый размер, дальше Phaser сам ресайзит
     width: 1920,
@@ -749,10 +749,8 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
   const isMobile = this.sys.game.device.os.android || this.sys.game.device.os.iOS;
 
   let btnScale = Phaser.Math.Clamp(S / 900, 0.55, 0.80);
-if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
-if (isSquarish) btnScale *= 1.05;
-
-const MENU_BTN_MUL = 1.35; // сделай 1.25 / 1.35 / 1.45
+  if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
+  if (isSquarish) btnScale *= 1.05;
 
   // ---------- 3 кнопки ----------
   const t = (k, fallback) =>
@@ -793,17 +791,15 @@ const MENU_BTN_MUL = 1.35; // сделай 1.25 / 1.35 / 1.45
       } else {
         doStart();
       }
-    }, menuBtnScale);
-
+    }, btnScale);
 
     this.createButton(cx, startY + spacing, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
       this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
-    }, menuBtnScale);
-
+    }, btnScale);
 
     this.createButton(cx, startY + spacing * 2, t('menu.settings', 'НАСТРОЙКИ'), () => {
       this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
-    }, menuBtnScale);
+    }, btnScale);
 
   } else {
     const spacingX = Math.round(Phaser.Math.Clamp(W * 0.28, 260, 420));
@@ -813,7 +809,7 @@ const MENU_BTN_MUL = 1.35; // сделай 1.25 / 1.35 / 1.45
 
     this.createButton(cx - spacingX, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
       this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
-    }, btnScale, MENU_BTN_MUL);
+    }, btnScale);
 
     this.createButton(cx, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
       if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
@@ -837,12 +833,11 @@ const MENU_BTN_MUL = 1.35; // сделай 1.25 / 1.35 / 1.45
       } else {
         doStart();
       }
-    }, btnScale, MENU_BTN_MUL);
-
+    }, btnScale);
 
     this.createButton(cx + spacingX, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
       this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
-    }, btnScale, MENU_BTN_MUL);
+    }, btnScale);
   }
 
   // ---------- Иконки "Награды" и "Статистика" ----------
@@ -1920,35 +1915,40 @@ computeLayoutParams() {
   const W = this.scale.width;
   const H = this.scale.height;
 
-  // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
-  this.PADDING = Math.round(Math.max(8, W * 0.02));
+  // Десктоп-версия: делаем поле и карты крупнее примерно на 15%
+  const MUL = 1.15;
 
-  // базовый gap (не привязываем к cardW, чтобы не раздувать на мобилке)
-  const gapBase = Math.round(Math.max(6, W * 0.01));
+  // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
+  this.PADDING = Math.round(Math.max(8, W * 0.02) * MUL);
+
+  // базовый gap
+  const gapBase = Math.round(Math.max(6, W * 0.01) * MUL);
   this.COL_GAP = gapBase;
 
   // считаем cardW так, чтобы 7 колонок гарантированно влезли
   const availableW = W - this.PADDING * 2 - this.COL_GAP * 6;
   let cardW = Math.floor(availableW / 7);
 
-  // страховочные границы
-  cardW = Phaser.Math.Clamp(cardW, 48, 110);
+  // страховочные границы (увеличили максимум ~ на 15%)
+  const maxCardW = Math.round(110 * MUL);
+  cardW = Phaser.Math.Clamp(cardW, 48, maxCardW);
 
   this.CARD_W = cardW;
   this.CARD_H = Math.round(this.CARD_W * 1.44);
 
-  // шаги всегда одни и те же (никаких портретных коэффициентов)
+  // шаги
   const downMul = 0.15;
   const upMul   = 0.18;
 
   this.TABLEAU_STEP_DOWN = Math.round(Math.max(10, this.CARD_H * downMul));
   this.TABLEAU_STEP_UP   = Math.round(Math.max(12, this.CARD_H * upMul));
 
-  // слоты (без портретных правок)
-  this.SLOT_INSET = 6;
-  this.SLOT_LINE = 2;
-  this.SLOT_RADIUS = 20;
+  // слоты (чуть крупнее)
+  this.SLOT_INSET = Math.round(6 * MUL);
+  this.SLOT_LINE = Math.max(2, Math.round(2 * MUL));
+  this.SLOT_RADIUS = Math.round(20 * MUL);
 }
+
 
   // ====== create ======
 create() {
@@ -4710,70 +4710,38 @@ config.scene = [Boot, LoadingScene, MenuScene, TutorialScene, SettingsScene, Gam
 })();
 
 
-// 1) game
+// 1️⃣ СНАЧАЛА объявляем game
 let game = null;
 
-function applyLetterbox() {
-  if (!window.__phaserGame || !window.__phaserGame.canvas) return;
-
-  const DW = 1920;
-  const DH = 1080;
-
-  const container = document.getElementById('game-container') || document.body;
-  const cw = container.clientWidth || window.innerWidth;
-  const ch = container.clientHeight || window.innerHeight;
-
-  const scale = Math.min(cw / DW, ch / DH);
-
-  const displayW = Math.floor(DW * scale);
-  const displayH = Math.floor(DH * scale);
-
-  const canvas = window.__phaserGame.canvas;
-
-  canvas.style.width = displayW + 'px';
-  canvas.style.height = displayH + 'px';
-
-  canvas.style.position = 'absolute';
-  canvas.style.left = '50%';
-  canvas.style.top = '50%';
-  canvas.style.transform = 'translate(-50%, -50%)';
-}
-
-// делаем доступным для index.html (setVh дергает это)
-window.__applyLetterbox = applyLetterbox;
-
-// 2) letterbox / refresh (без ошибок)
+// 2️⃣ СРАЗУ ПОСЛЕ — глобальная функция refreshBounds
 function refreshBounds() {
-  // если есть наша letterbox-функция - используем ее
-  if (window.__applyLetterbox) {
-    try { window.__applyLetterbox(); } catch (e) {}
-    return;
-  }
+  if (!game || !game.scale || !game.canvas) return;
 
-  // запасной вариант - просто refresh Phaser scale
-  if (!window.__phaserGame || !window.__phaserGame.scale) return;
-  try { window.__phaserGame.scale.refresh(); } catch (e) {}
+  try {
+    game.scale.refresh();
+  } catch (e) {
+    // на раннем старте Phaser canvas может быть еще не готов
+  }
 }
 
-// 3) старт Phaser
+// 3️⃣ ПОТОМ startPhaser
 function startPhaser() {
   if (game) return;
 
   game = new Phaser.Game(config);
+  requestAnimationFrame(() => {
+  const el = document.getElementById('boot-loader');
+  if (el) el.style.display = 'none';
+});
+
   window.__phaserGame = game;
 
-  // убрать лоадер после первого кадра
-  requestAnimationFrame(() => {
-    const el = document.getElementById('boot-loader');
-    if (el) el.style.display = 'none';
-  });
-
-  // вызывать только после создания canvas
+  // вызывать ТОЛЬКО после создания canvas
   setTimeout(refreshBounds, 0);
 
   window.addEventListener('resize', refreshBounds);
-  window.addEventListener('scroll', refreshBounds, { passive: true });
 }
+
 
 (async () => {
   let initPromise = null;
@@ -4782,11 +4750,16 @@ function startPhaser() {
     initPromise = window.Platform?.init?.(); // запускаем init, но не ждем
   } catch (e) {}
 
-  // Phaser стартует сразу
+  // Phaser стартует сразу -> Boot/LoadingScene покажутся без паузы
   startPhaser();
 
-  // если нужно - дождемся платформы
+  // если нужно - дождемся платформы уже "в фоне"
   try {
     await initPromise;
   } catch (e) {}
 })();
+
+
+// на всякий случай
+window.addEventListener('resize', refreshBounds);
+window.addEventListener('scroll', refreshBounds, { passive: true });
