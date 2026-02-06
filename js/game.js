@@ -749,8 +749,8 @@ safeStartWithLoader(nextKey, nextData, enqueueFn) {
   const isMobile = this.sys.game.device.os.android || this.sys.game.device.os.iOS;
 
   let btnScale = Phaser.Math.Clamp(S / 900, 0.55, 0.80);
-  if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
-  if (isSquarish) btnScale *= 1.05;
+if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
+if (isSquarish) btnScale *= 1.05;
 
   // ---------- 3 кнопки ----------
   const t = (k, fallback) =>
