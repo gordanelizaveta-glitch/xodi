@@ -9,14 +9,12 @@
 
   <script src="js/vk-bridge.min.js"></script>
 
-
-
   <style>
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      background: #E8DAC2;
+      background: #1e1e1e;
       color: #fff;
       font-family: Arial, sans-serif;
 
@@ -36,6 +34,8 @@
       width: 100vw;
       height: calc(var(--vh, 1vh) * 100);
       overflow: hidden;
+
+      /* цвет полей */
       background: #E8DAC2;
 
       touch-action: none;
@@ -47,9 +47,13 @@
 
     #game-container canvas {
       display: block;
+
+      /* Размером управляет JS (applyLetterbox). Не растягиваем canvas на 100% */
       position: absolute;
-      left: 0;
-      top: 0;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+
       -webkit-user-select: none;
       user-select: none;
       -webkit-touch-callout: none;
@@ -239,44 +243,37 @@
 
   <div id="game-container"></div>
 
-
-
-
-
   <!-- 1.6.2.7: блокируем контекстное меню/выделение на всей странице -->
-
   <script>
-  (function () {
-    document.addEventListener('contextmenu', function (e) {
-      e.preventDefault();
-    }, { capture: true });
-
-    document.addEventListener('selectstart', function (e) {
-      e.preventDefault();
-    }, { capture: true });
-
-    document.addEventListener('dragstart', function (e) {
-      e.preventDefault();
-    }, { capture: true });
-
-    // Блокируем long-press/scroll только в зоне игры, НЕ на всем документе
-    const gameEl = document.getElementById('game-container');
-
-    if (gameEl) {
-      gameEl.addEventListener('touchstart', function (e) {
-        const target = e.target;
-
-        // на списке наград скролл должен работать
-       const inRewards = !!(target && target.closest && target.closest('#rewards-overlay'));
-if (inRewards) return;
-
-
+    (function () {
+      document.addEventListener('contextmenu', function (e) {
         e.preventDefault();
-      }, { passive: false });
-    }
-  })();
-</script>
+      }, { capture: true });
 
+      document.addEventListener('selectstart', function (e) {
+        e.preventDefault();
+      }, { capture: true });
+
+      document.addEventListener('dragstart', function (e) {
+        e.preventDefault();
+      }, { capture: true });
+
+      // Блокируем long-press/scroll только в зоне игры, НЕ на всем документе
+      const gameEl = document.getElementById('game-container');
+
+      if (gameEl) {
+        gameEl.addEventListener('touchstart', function (e) {
+          const target = e.target;
+
+          // на списке наград скролл должен работать
+          const inRewards = !!(target && target.closest && target.closest('#rewards-overlay'));
+          if (inRewards) return;
+
+          e.preventDefault();
+        }, { passive: false });
+      }
+    })();
+  </script>
 
   <!-- порядок важен -->
   <script src="js/app.js"></script>
@@ -291,30 +288,31 @@ if (inRewards) return;
   <script src="js/app_visit.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/savegame.js"></script>
+
   <script>
-  (function () {
-    function setVh() {
-      var h = (window.visualViewport && window.visualViewport.height) ? window.visualViewport.height : window.innerHeight;
-      document.documentElement.style.setProperty('--vh', (h * 0.01) + 'px');
+    (function () {
+      function setVh() {
+        var h = (window.visualViewport && window.visualViewport.height) ? window.visualViewport.height : window.innerHeight;
+        document.documentElement.style.setProperty('--vh', (h * 0.01) + 'px');
 
-      // Подгоняем letterbox-ресайз (если подключен)
-      if (typeof window.__applyLetterbox === 'function') {
-        try { window.__applyLetterbox(); } catch (e) {}
-      } else if (window.__phaserGame && window.__phaserGame.scale) {
-        try { window.__phaserGame.scale.refresh(); } catch (e) {}
+        // Если есть letterbox - пересчитаем
+        if (window.__applyLetterbox) {
+          try { window.__applyLetterbox(); } catch (e) {}
+        } else if (window.__phaserGame && window.__phaserGame.scale) {
+          try { window.__phaserGame.scale.refresh(); } catch (e) {}
+        }
       }
-    }
 
-    setVh();
-    window.addEventListener('resize', setVh);
-    window.addEventListener('orientationchange', setVh);
+      setVh();
+      window.addEventListener('resize', setVh);
+      window.addEventListener('orientationchange', setVh);
 
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', setVh);
-      window.visualViewport.addEventListener('scroll', setVh);
-    }
-  })();
-</script>
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', setVh);
+        window.visualViewport.addEventListener('scroll', setVh);
+      }
+    })();
+  </script>
 
   <script src="js/game.js"></script>
 </body>

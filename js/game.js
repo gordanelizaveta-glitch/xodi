@@ -4705,80 +4705,40 @@ config.scene = [Boot, LoadingScene, MenuScene, TutorialScene, SettingsScene, Gam
 })();
 
 
-
-// 1️⃣ СНАЧАЛА объявляем game
+// 1) game
 let game = null;
 
-// ===== Letterbox resize (как на Яндексе): 16:9 "вписываем" в любое окно, поля допустимы =====
-function applyLetterbox() {
-  if (!game || !game.scale || !game.canvas) return;
-
-  const container = document.getElementById('game-container');
-  if (!container) return;
-
-  const sw = Math.max(1, container.clientWidth || 0);
-  const sh = Math.max(1, container.clientHeight || 0);
-
-  const dw = DESIGN_LANDSCAPE.w;
-  const dh = DESIGN_LANDSCAPE.h;
-
-  const s = Math.min(sw / dw, sh / dh);
-
-  const vw = Math.max(1, Math.round(dw * s));
-  const vh = Math.max(1, Math.round(dh * s));
-
-  // ВАЖНО: Phaser будет думать, что "экран" = vw x vh (это и нужно для всех сцен)
-  try { game.scale.resize(vw, vh); } catch (e) {}
-
-  // Канвас физически центруем внутри большого контейнера, чтобы появились поля
-  const canvas = game.canvas;
-  canvas.style.position = 'absolute';
-  canvas.style.width = vw + 'px';
-  canvas.style.height = vh + 'px';
-  canvas.style.left = Math.round((sw - vw) * 0.5) + 'px';
-  canvas.style.top  = Math.round((sh - vh) * 0.5) + 'px';
-  canvas.style.display = 'block';
-
-  // на некоторых браузерах полезно обновить bounds
-  try { game.scale.refresh(); } catch (e) {}
-  try { game.scale.updateBounds(); } catch (e) {}
-
-  // чтобы index.html мог дергать это при setVh
-  window.__phaserLetterbox = { sw, sh, vw, vh, s };
-}
-
-// alias (чтобы старый код/сцены не падали)
+// 2) letterbox / refresh (без ошибок)
 function refreshBounds() {
-  applyLetterbox();
+  // если есть наша letterbox-функция - используем ее
+  if (window.__applyLetterbox) {
+    try { window.__applyLetterbox(); } catch (e) {}
+    return;
+  }
+
+  // запасной вариант - просто refresh Phaser scale
+  if (!window.__phaserGame || !window.__phaserGame.scale) return;
+  try { window.__phaserGame.scale.refresh(); } catch (e) {}
 }
 
-// делаем доступным для index.html
-window.__applyLetterbox = applyLetterbox;
-
-// ===== startPhaser =====
+// 3) старт Phaser
 function startPhaser() {
   if (game) return;
 
   game = new Phaser.Game(config);
+  window.__phaserGame = game;
 
+  // убрать лоадер после первого кадра
   requestAnimationFrame(() => {
     const el = document.getElementById('boot-loader');
     if (el) el.style.display = 'none';
   });
 
-  window.__phaserGame = game;
+  // вызывать только после создания canvas
+  setTimeout(refreshBounds, 0);
 
-  // вызывать ТОЛЬКО после создания canvas
-  setTimeout(applyLetterbox, 0);
-
-  // слушатели на ресайз
-  window.addEventListener('resize', applyLetterbox);
-  window.addEventListener('orientationchange', applyLetterbox);
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', applyLetterbox);
-    window.visualViewport.addEventListener('scroll', applyLetterbox);
-  }
+  window.addEventListener('resize', refreshBounds);
+  window.addEventListener('scroll', refreshBounds, { passive: true });
 }
 
 (async () => {
@@ -4788,13 +4748,11 @@ function startPhaser() {
     initPromise = window.Platform?.init?.(); // запускаем init, но не ждем
   } catch (e) {}
 
-  // Phaser стартует сразу -> Boot/LoadingScene покажутся без паузы
+  // Phaser стартует сразу
   startPhaser();
 
-  // если нужно - дождемся платформы уже "в фоне"
-  try { await initPromise; } catch (e) {}
+  // если нужно - дождемся платформы
+  try {
+    await initPromise;
+  } catch (e) {}
 })();
-
-// на всякий случай
-window.addEventListener('resize', applyLetterbox);
-window.addEventListener('scroll', applyLetterbox, { passive: true });
