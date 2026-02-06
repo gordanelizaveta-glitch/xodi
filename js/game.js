@@ -1853,9 +1853,6 @@ class GameScene extends Phaser.Scene {
 
   // ====== required by you ======
 computeLayoutParams() {
-  const W = this._baseW || this.scale.width;
-const H = this._baseH || this.scale.height;
-
 
   // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
   this.PADDING = Math.round(Math.max(8, W * 0.02));
@@ -1890,13 +1887,6 @@ const H = this._baseH || this.scale.height;
   // ====== create ======
 create() {
   this.cameras.main.roundPixels = true;
-
-  // --- фикс базового размера (один раз) ---
-  // чтобы во ВК не "прыгали" размеры карт/слотов из-за дергания iframe
-  if (!this._baseW || !this._baseH) {
-    this._baseW = this.scale.width;
-    this._baseH = this.scale.height;
-  }
 
   // ===== ПАУЗА ТАЙМЕРА ПРИ СВОРАЧИВАНИИ ОКНА =====
   const pauseIfActive = () => {
