@@ -4708,6 +4708,35 @@ config.scene = [Boot, LoadingScene, MenuScene, TutorialScene, SettingsScene, Gam
 // 1) game
 let game = null;
 
+function applyLetterbox() {
+  if (!window.__phaserGame || !window.__phaserGame.canvas) return;
+
+  const DW = 1920;
+  const DH = 1080;
+
+  const container = document.getElementById('game-container') || document.body;
+  const cw = container.clientWidth || window.innerWidth;
+  const ch = container.clientHeight || window.innerHeight;
+
+  const scale = Math.min(cw / DW, ch / DH);
+
+  const displayW = Math.floor(DW * scale);
+  const displayH = Math.floor(DH * scale);
+
+  const canvas = window.__phaserGame.canvas;
+
+  canvas.style.width = displayW + 'px';
+  canvas.style.height = displayH + 'px';
+
+  canvas.style.position = 'absolute';
+  canvas.style.left = '50%';
+  canvas.style.top = '50%';
+  canvas.style.transform = 'translate(-50%, -50%)';
+}
+
+// делаем доступным для index.html (setVh дергает это)
+window.__applyLetterbox = applyLetterbox;
+
 // 2) letterbox / refresh (без ошибок)
 function refreshBounds() {
   // если есть наша letterbox-функция - используем ее
