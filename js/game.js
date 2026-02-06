@@ -214,7 +214,7 @@ type: Phaser.AUTO,
 width: 1920,
 height: 1080,
 parent: 'game-container',
-scale: { mode: Phaser.Scale.NONE },
+scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
 backgroundColor: 'rgba(0,0,0,0)'
 };
 
@@ -1907,35 +1907,53 @@ class GameScene extends Phaser.Scene {
 computeLayoutParams() {
   const W = this.scale.width;
   const H = this.scale.height;
+  const S = Math.min(W, H);
 
-  // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
-  this.PADDING = Math.round(Math.max(8, W * 0.02));
+  // Паддинги и зазоры считаем от реального контейнера (во ВК iframe размеры другие)
+  const pad = Math.round(Phaser.Math.Clamp(S * 0.02, 10, 28));
+  const gap = Math.round(Phaser.Math.Clamp(S * 0.012, 8, 22));
 
-  // базовый gap (не привязываем к cardW, чтобы не раздувать на мобилке)
-  const gapBase = Math.round(Math.max(6, W * 0.01));
-  this.COL_GAP = gapBase;
+  this.PADDING = pad;
+  this.COL_GAP = gap;
 
-  // считаем cardW так, чтобы 7 колонок гарантированно влезли
-  const availableW = W - this.PADDING * 2 - this.COL_GAP * 6;
-  let cardW = Math.floor(availableW / 7);
+  // 1) Ограничение по ширине: 7 колонок + 6 зазоров + паддинги должны влезать
+  const availW = Math.max(0, W - pad * 2 - gap * 6);
+  let cardW = Math.floor(availW / 7);
 
-  // страховочные границы
-  cardW = Phaser.Math.Clamp(cardW, 48, 110);
+  // 2) Ограничение по высоте: нижние карты не должны вылезать за экран
+  // Берем безопасный верхний ряд (сток/сброс/фундаменты) + таблица ниже
+  const MAX_COL_CARDS = 19; // безопасно для долгих раскладов
+  const CARD_ASPECT = 1.44; // высота = ширина * 1.44 (под ваши ассеты)
+
+  cardW = Phaser.Math.Clamp(cardW, 52, 240);
+
+  // Несколько итераций: ширина -> высота -> уточнить
+  for (let i = 0; i < 4; i++) {
+    const cardH = Math.round(cardW * CARD_ASPECT);
+
+    const topRowH = cardH + gap * 1.6;                 // верхняя линия слотов + небольшой запас
+    const tableauAvailH = Math.max(0, H - pad - topRowH - pad);
+
+    const stepDown = Phaser.Math.Clamp(Math.round(cardH * 0.23), 14, 34);
+    const needH = cardH + (MAX_COL_CARDS - 1) * stepDown;
+
+    if (needH <= tableauAvailH) break;
+
+    const k = tableauAvailH / Math.max(1, needH);
+    cardW = Math.max(52, Math.floor(cardW * k));
+  }
 
   this.CARD_W = cardW;
-  this.CARD_H = Math.round(this.CARD_W * 1.44);
+  this.CARD_H = Math.round(this.CARD_W * CARD_ASPECT);
 
-  // шаги всегда одни и те же (никаких портретных коэффициентов)
-  const downMul = 0.15;
-  const upMul   = 0.18;
+  // Шаги каскада (вниз для открытых, вверх для закрытых)
+  this.TABLEAU_STEP_DOWN = Phaser.Math.Clamp(Math.round(this.CARD_H * 0.23), 14, 34);
+  this.TABLEAU_STEP_UP   = Phaser.Math.Clamp(Math.round(this.CARD_H * 0.28), 16, 40);
 
-  this.TABLEAU_STEP_DOWN = Math.round(Math.max(10, this.CARD_H * downMul));
-  this.TABLEAU_STEP_UP   = Math.round(Math.max(12, this.CARD_H * upMul));
-
-  // слоты (без портретных правок)
-  this.SLOT_INSET = 6;
-  this.SLOT_LINE = 2;
-  this.SLOT_RADIUS = 20;
+  // Слоты (рамка/скругление) тоже масштабируем от карты
+  this.SLOT_INSET  = Phaser.Math.Clamp(Math.round(this.CARD_W * 0.06), 4, 12);
+  this.SLOT_LINE   = Phaser.Math.Clamp(Math.round(this.CARD_W * 0.02), 2, 4);
+  this.SLOT_RADIUS = Phaser.Math.Clamp(Math.round(this.CARD_W * 0.22), 12, 28);
 }
 
   // ====== create ======
