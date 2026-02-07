@@ -2249,33 +2249,30 @@ buildLayout() {
   // верхняя линия (stock/waste/foundation)
   this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2) + topRowDown;
 
-  // ✅ компенсируем рост высоты карты, чтобы вертикальные расстояния остались "как раньше"
+  // =========================
+  // ✅ фиксируем вертикальный "разрыв" между верхней линией и tableau
+  // (не зависит от текущей высоты карт)
+  // =========================
   const baseH = (this.BASE_CARD_H || this.CARD_H);
 
-// компенсируем только рост карт, если вдруг карты стали меньше - не "толкаем" вниз
-const dH = Math.max(0, this.CARD_H - baseH);
-
-const keepGapComp = Math.round(1.5 * dH);
-
-
-  // поле (tableau)
-  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown - keepGapComp;
-
-  this.pos.tableauY =
-    this.pos.topY +
-    this.CARD_H +
+  // "как раньше": topY + baseH + PADDING + baseH/2 + H*0.08
+  const baseGapFromTop =
+    baseH +
     this.PADDING +
-    Math.round(this.CARD_H / 2) +
-    TABLEAU_EXTRA_DOWN;
+    Math.round(baseH / 2) +
+    Math.round(H * 0.08) +
+    tableauMoreDown;
+
+  this.pos.tableauY = this.pos.topY + baseGapFromTop;
 
   // фиксированный ограничитель (без isMobilePortrait)
   const clampK = 0.35;
-
   this.pos.tableauY = Math.min(
     this.pos.tableauY,
-    Math.round(H * clampK) + TABLEAU_EXTRA_DOWN
+    Math.round(H * clampK) + Math.round(H * 0.08) + tableauMoreDown
   );
 }
+
 
 
   onResize() {
