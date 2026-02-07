@@ -314,5 +314,7 @@
   </script>
 
   <script src="js/game.js"></script>
-</body>
-</html>
+  <script>
+    // ensure letterbox runs once after game loads
+    window.addEventListener("load", () => { if (window.__applyLetterbox) { try { window.__applyLetterbox(); } catch (e) {} } });
+  </script>

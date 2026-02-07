@@ -1,5 +1,38 @@
 // ===== DESIGN SIZES =====
 const DESIGN_LANDSCAPE = { w: 1920, h: 1080 };
+// ===== I18N  =====
+(function () {
+  window.APP = window.APP || {};
+
+  function detectLang() {
+    const fromApp = window.APP.lang;
+    const fromPlatform = window.Platform && window.Platform.lang;
+    const lang = (fromApp || fromPlatform || 'ru').toString().toLowerCase();
+
+    return lang;
+  }
+
+  // store detected language (even if only ru is supported)
+  window.APP.lang = window.APP.lang || detectLang();
+  try { document.documentElement.lang = window.APP.lang; } catch (e) {}
+
+  // minimal dictionary (extend later if you add more languages)
+  const RU = {
+    menu_new_game: 'НОВАЯ ИГРА',
+    menu_tutorial: 'ОБУЧЕНИЕ',
+    menu_settings: 'НАСТРОЙКИ'
+  };
+
+  if (!window.APP.i18n) {
+    window.APP.i18n = {
+      t: function (key) {
+        // game supports only Russian сейчас; keep deterministic output
+        return RU[key] || key;
+      }
+    };
+  }
+})();
+
 
 // ===== CARD & PADDING (дизайн-значения) =====
 const CARD_W = 90;
@@ -181,14 +214,12 @@ const config = {
   transparent: true,
 backgroundColor: 'rgba(0,0,0,0)',
 
-  scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-
-    // базовый размер, дальше Phaser сам ресайзит
-    width: 1920,
-    height: 1080
-  },
+ scale: {
+  mode: Phaser.Scale.NONE,
+  autoCenter: Phaser.Scale.NO_CENTER,
+  width: 1920,
+  height: 1080
+},
   scene: []
 };
 
@@ -520,26 +551,36 @@ class MenuScene extends Phaser.Scene {
     this.load.image('btn_normal', 'assets/buttonmenuscene/Normal1.png');
     this.load.image('btn_hover', 'assets/buttonmenuscene/Hover1.png');
     this.load.image('btn_pressed', 'assets/buttonmenuscene/Pressed1.png');
+
+    // Menu background video (Phaser Video, not DOM)
+    this.load.video('menu_bg_vid', 'assets/backgrounds/bgvid1.mp4', 'loadeddata', false, true);
   }
 
   create() {
     this._switching = false;
     if (this.input) this.input.enabled = true;
+  
+// === AUTO RESUME (no UI change) ===
+var hasSave = false;
+if (window.SaveGame && window.SaveGame.load) {
+  hasSave = !!window.SaveGame.load();
+}
 
-    // Реклама сразу после запуска (1 раз за запуск)
-    if (!window.__ad_shown_start) {
-      window.__ad_shown_start = true;
+// если пользователь явно попросил меню - не делаем auto-resume
+var forceMenu = false;
+try { forceMenu = sessionStorage.getItem('force_menu') === '1'; } catch (e) {}
 
-      if (this.input) this.input.enabled = false;
+if (forceMenu) {
+  try { sessionStorage.removeItem('force_menu'); } catch (e) {}
+} else {
+  var ctx = 'menu';
+  try { ctx = sessionStorage.getItem('resume_context') || 'menu'; } catch (e) {}
 
-      const showAd = (window.Platform && typeof window.Platform.showInterstitial === 'function')
-        ? window.Platform.showInterstitial('start')
-        : null;
-
-      Promise.resolve(showAd).finally(() => {
-        if (this.input) this.input.enabled = true;
-      });
-    }
+  if (ctx === 'game_active' && hasSave) {
+    this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
+    return;
+  }
+}
 
     // фон + UI
     this.createBackgroundVideo();
@@ -609,26 +650,29 @@ class MenuScene extends Phaser.Scene {
   }
 
   // Переход через LoadingScene (лоудер между сценами)
-  safeStartWithLoader(nextKey, nextData, enqueueFn) {
-    if (this._switching) return;
-    this._switching = true;
+safeStartWithLoader(nextKey, nextData, enqueueFn) {
+  if (this._switching) return;
+  this._switching = true;
 
-    if (this.input) this.input.enabled = false;
+  if (this.input) this.input.enabled = false;
 
-    const list = (this.children && this.children.list) ? this.children.list : [];
-    for (let i = 0; i < list.length; i++) {
-      const obj = list[i];
-      if (!obj) continue;
+  const list = (this.children && this.children.list) ? this.children.list : [];
+  for (let i = 0; i < list.length; i++) {
+    const obj = list[i];
+    if (!obj) continue;
 
-      if (obj.input) {
-        try { obj.disableInteractive(); } catch (e) {}
-      }
-      if (typeof obj.removeAllListeners === 'function') {
-        try { obj.removeAllListeners(); } catch (e) {}
-      }
+    if (obj.input) {
+      try { obj.disableInteractive(); } catch (e) {}
     }
+    if (typeof obj.removeAllListeners === 'function') {
+      try { obj.removeAllListeners(); } catch (e) {}
+    }
+  }
 
-    this.events.once(Phaser.Scenes.Events.POST_UPDATE, () => {
+  // Даем браузеру кадр, чтобы все "успокоилось" и лоадер появился сразу
+  requestAnimationFrame(() => {
+    // и еще один микрокадр на всякий случай (на мобилках это реально помогает)
+    requestAnimationFrame(() => {
       this.scene.start('LoadingScene', {
         next: nextKey,
         data: nextData || {},
@@ -637,335 +681,346 @@ class MenuScene extends Phaser.Scene {
         }
       });
     });
-  }
+  });
+}
 
   // ---------- background video (DOM) ----------
-  ensureDomBgVideo() {
-    const parent = document.getElementById('game-container') || document.body;
 
-    let v = document.getElementById('menu-bg-video');
-    if (!v) {
-      v = document.createElement('video');
-      v.id = 'menu-bg-video';
-
-      v.muted = true;
-      v.loop = true;
-      v.playsInline = true;
-      v.setAttribute('muted', '');
-      v.setAttribute('playsinline', '');
-      v.setAttribute('webkit-playsinline', '');
-
-      v.style.position = 'absolute';
-      v.style.left = '0';
-      v.style.top = '0';
-      v.style.width = '100%';
-      v.style.height = '100%';
-      v.style.objectFit = 'cover';
-      v.style.zIndex = '0';
-      v.style.pointerEvents = 'none';
-
-      parent.style.position = parent.style.position || 'relative';
-      parent.prepend(v);
-
-      const canvas = parent.querySelector('canvas');
-      if (canvas) {
-        canvas.style.position = canvas.style.position || 'relative';
-        canvas.style.zIndex = '1';
-        canvas.style.pointerEvents = 'auto';
-      }
-    }
-
-    return v;
-  }
-
-  setDomBgVideoSource() {
-    const v = this.ensureDomBgVideo();
-
-    const src = 'assets/backgrounds/bgvid1.mp4';
-
-    if (!v.src || !v.src.includes(src)) {
-      v.src = src;
-      try { v.load(); } catch (e) {}
-    }
-
-    try {
-      const p = v.play();
-      if (p && typeof p.catch === 'function') p.catch(() => {});
-    } catch (e) {}
-
-    v.style.display = 'block';
-  }
 
   createBackgroundVideo(forceRecreate = false) {
-    this.setDomBgVideoSource();
+    const w = this.scale.width;
+    const h = this.scale.height;
+
+    if (this.bgVideo) {
+      try { this.bgVideo.stop(); } catch (e) {}
+      this.bgVideo.destroy();
+      this.bgVideo = null;
+    }
+
+    // Video is rendered by Phaser (inside canvas), not added to DOM.
+    this.bgVideo = this.add.video(w / 2, h / 2, 'menu_bg_vid');
+    this.bgVideo.setOrigin(0.5, 0.5);
+    this.bgVideo.setDepth(-1000);
+
+    // cover screen
+    this.bgVideo.setDisplaySize(w, h);
+
+    // autoplay loop (ignore autoplay errors silently)
+    try { this.bgVideo.setLoop(true); } catch (e) {}
+    try { this.bgVideo.play(true); } catch (e) {}
   }
 
   // ---------- UI ----------
   createUI() {
-    this.destroyButtons();
+  this.destroyButtons();
 
-    // очистка старых обработчиков наград
+  // очистка старых обработчиков наград
+  if (this.ui && this.ui.onNewHandler) {
+    try { window.removeEventListener('achievements:new', this.ui.onNewHandler); } catch (e) {}
+    this.ui.onNewHandler = null;
+  }
+  if (this.ui && this.ui.pulseTween) {
+    try { this.ui.pulseTween.stop(); } catch (e) {}
+    this.ui.pulseTween = null;
+  }
+
+  if (this.ui && this.ui.badge) { try { this.ui.badge.destroy(); } catch (e) {} this.ui.badge = null; }
+  if (this.ui && this.ui.rewardsIcon) { try { this.ui.rewardsIcon.destroy(); } catch (e) {} this.ui.rewardsIcon = null; }
+  if (this.ui && this.ui.statsIcon) { try { this.ui.statsIcon.destroy(); } catch (e) {} this.ui.statsIcon = null; }
+
+  const W = this.scale.width;
+  const H = this.scale.height;
+  const cx = this.cameras.main.centerX;
+
+  const isSmallScreen = (Math.min(W, H) <= 600);
+
+  // "квадратность"
+  const aspect = Math.max(W, H) / Math.min(W, H);
+  const isSquarish = (aspect <= 1.25);
+  const useVerticalButtons = isSquarish;
+
+  const L = getLayout(this);
+
+  const minSide = Math.min(W, H);
+  const S = minSide;
+
+  const isMobile = this.sys.game.device.os.android || this.sys.game.device.os.iOS;
+
+  let btnScale = Phaser.Math.Clamp(S / 900, 0.55, 0.80);
+  if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
+  if (isSquarish) btnScale *= 1.05;
+
+  // ---------- 3 кнопки ----------
+  const t = (k, fallback) =>
+    (window.APP && window.APP.i18n && window.APP.i18n.t ? window.APP.i18n.t(k) : fallback);
+
+  if (useVerticalButtons) {
+    const spacingBase = isSquarish ? 200 : 80;
+    const spacing = Math.round(spacingBase * L.s);
+
+    let startY = Math.round(H * 0.66);
+
+    const bottomLimit = Math.round(H * 0.88);
+    const lastY = startY + spacing * 2;
+    if (lastY > bottomLimit) startY -= (lastY - bottomLimit);
+
+    const topLimit = Math.round(H * 0.34);
+    if (startY < topLimit) startY = topLimit;
+
+    this.createButton(cx, startY, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
+      if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
+
+      // НЕ показываем рекламу на первую партию за запуск
+      if (!window.__ad_skip_first_party_done) {
+        window.__ad_skip_first_party_done = true;
+        this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
+        return;
+      }
+
+      if (this.input) this.input.enabled = false;
+
+      const doStart = () => {
+        if (this.input) this.input.enabled = true;
+        this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
+      };
+
+      if (window.Platform && typeof window.Platform.showInterstitial === 'function') {
+        window.Platform.showInterstitial('party_start').finally(doStart);
+      } else {
+        doStart();
+      }
+    }, btnScale);
+
+    this.createButton(cx, startY + spacing, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
+      this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
+    }, btnScale);
+
+    this.createButton(cx, startY + spacing * 2, t('menu.settings', 'НАСТРОЙКИ'), () => {
+      this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
+    }, btnScale);
+
+  } else {
+    const spacingX = Math.round(Phaser.Math.Clamp(W * 0.28, 260, 420));
+
+    let y = Math.round(H * 0.70);
+    if (y > Math.round(H * 0.82)) y = Math.round(H * 0.78);
+
+    this.createButton(cx - spacingX, y, t('menu.tutorial', 'ОБУЧЕНИЕ'), () => {
+      this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
+    }, btnScale);
+
+    this.createButton(cx, y, t('menu.new_game', 'НОВАЯ ИГРА'), () => {
+      if (window.SaveGame && window.SaveGame.clear) window.SaveGame.clear();
+
+      // НЕ показываем рекламу на первую партию за запуск
+      if (!window.__ad_skip_first_party_done) {
+        window.__ad_skip_first_party_done = true;
+        this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
+        return;
+      }
+
+      if (this.input) this.input.enabled = false;
+
+      const doStart = () => {
+        if (this.input) this.input.enabled = true;
+        this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
+      };
+
+      if (window.Platform && typeof window.Platform.showInterstitial === 'function') {
+        window.Platform.showInterstitial('party_start').finally(doStart);
+      } else {
+        doStart();
+      }
+    }, btnScale);
+
+    this.createButton(cx + spacingX, y, t('menu.settings', 'НАСТРОЙКИ'), () => {
+      this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
+    }, btnScale);
+  }
+
+  // ---------- Иконки "Награды" и "Статистика" ----------
+  const iconSize = getUIIconSize(this);
+
+  let xDesign, yDesign;
+  if (isSquarish) {
+    const padX = Math.round(Phaser.Math.Clamp(L.DW * 0.06, 40, 70));
+    const padY = 480;
+    xDesign = L.DW - padX;
+    yDesign = padY;
+  } else {
+    const padX = 92;
+    const padY = 92;
+    xDesign = L.DW - padX;
+    yDesign = padY;
+  }
+
+  const p = dxy(L, xDesign, yDesign);
+
+  const rewardsIcon = this.add.image(p.x, p.y, 'icon_rewards')
+    .setOrigin(0.5)
+    .setDepth(50)
+    .setScrollFactor(0);
+
+  applyRoundIcon(this, rewardsIcon, iconSize, 1.35);
+  rewardsIcon.input.useHandCursor = true;
+  this.ui.rewardsIcon = rewardsIcon;
+
+  let restScale = rewardsIcon._baseScale || rewardsIcon.scale;
+
+  const badgeR = Math.round(iconSize * 0.14);
+  const badge = this.add.circle(
+    rewardsIcon.x + Math.round(iconSize * 0.40),
+    rewardsIcon.y - Math.round(iconSize * 0.34),
+    badgeR,
+    0xB93A3A
+  )
+    .setDepth(60)
+    .setScrollFactor(0)
+    .setVisible(false);
+
+  this.ui.badge = badge;
+
+  let pulseTween = null;
+  let isHovering = false;
+
+  const stopPulse = () => {
+    if (pulseTween) {
+      pulseTween.stop();
+      pulseTween = null;
+    }
+    this.ui.pulseTween = null;
+  };
+
+  const startPulse = () => {
+    if (isHovering) return;
+
+    stopPulse();
+    this.tweens.killTweensOf(rewardsIcon);
+    rewardsIcon.setScale(restScale);
+
+    pulseTween = this.tweens.add({
+      targets: rewardsIcon,
+      scale: restScale * 1.08,
+      duration: 520,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    this.ui.pulseTween = pulseTween;
+  };
+
+  const applyRest = () => {
+    stopPulse();
+    this.tweens.killTweensOf(rewardsIcon);
+    rewardsIcon.setScale(restScale);
+  };
+
+  const updateBadgeAndPulse = () => {
+    const hasNew = (window.Storage && typeof window.Storage.hasNewAchievements === 'function')
+      ? window.Storage.hasNewAchievements()
+      : false;
+
+    badge.setVisible(!!hasNew);
+    if (hasNew) startPulse();
+    else applyRest();
+  };
+
+  updateBadgeAndPulse();
+
+  const onNew = () => {
+    restScale = rewardsIcon.scale;
+    updateBadgeAndPulse();
+  };
+  this.ui.onNewHandler = onNew;
+  window.addEventListener('achievements:new', onNew);
+
+  this.events.once('shutdown', () => {
     if (this.ui && this.ui.onNewHandler) {
       try { window.removeEventListener('achievements:new', this.ui.onNewHandler); } catch (e) {}
       this.ui.onNewHandler = null;
     }
-    if (this.ui && this.ui.pulseTween) {
-      try { this.ui.pulseTween.stop(); } catch (e) {}
-      this.ui.pulseTween = null;
-    }
+    stopPulse();
+  });
 
-    if (this.ui && this.ui.badge) { try { this.ui.badge.destroy(); } catch (e) {} this.ui.badge = null; }
-    if (this.ui && this.ui.rewardsIcon) { try { this.ui.rewardsIcon.destroy(); } catch (e) {} this.ui.rewardsIcon = null; }
-    if (this.ui && this.ui.statsIcon) { try { this.ui.statsIcon.destroy(); } catch (e) {} this.ui.statsIcon = null; }
+  rewardsIcon.on('pointerup', () => {
+    this.game.events.emit('ui:click');
+    window.openRewardsOverlay('MenuScene');
+  });
 
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const cx = this.cameras.main.centerX;
-
-    const isSmallScreen = (Math.min(W, H) <= 600);
-
-    // "квадратность"
-    const aspect = Math.max(W, H) / Math.min(W, H);
-    const isSquarish = (aspect <= 1.25);
-    const useVerticalButtons = isSquarish;
-
-    const L = getLayout(this);
-
-    const minSide = Math.min(W, H);
-    const S = minSide;
-
-    const isMobile = this.sys.game.device.os.android || this.sys.game.device.os.iOS;
-
-    let btnScale = Phaser.Math.Clamp(S / 900, 0.55, 0.80);
-    if (isMobile && isSmallScreen) btnScale = Phaser.Math.Clamp(S / 820, 0.70, 0.95);
-    if (isSquarish) btnScale *= 1.05;
-
-    // ---------- 3 кнопки ----------
-    if (useVerticalButtons) {
-      const spacingBase = isSquarish ? 200 : 80;
-      const spacing = Math.round(spacingBase * L.s);
-
-      let startY = Math.round(H * 0.66);
-
-      const bottomLimit = Math.round(H * 0.88);
-      const lastY = startY + spacing * 2;
-      if (lastY > bottomLimit) startY -= (lastY - bottomLimit);
-
-      const topLimit = Math.round(H * 0.34);
-      if (startY < topLimit) startY = topLimit;
-
-      this.createButton(cx, startY, 'НОВАЯ ИГРА', () => {
-        this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
-      }, btnScale);
-
-      this.createButton(cx, startY + spacing, 'ОБУЧЕНИЕ', () => {
-        this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
-      }, btnScale);
-
-      this.createButton(cx, startY + spacing * 2, 'НАСТРОЙКИ', () => {
-        this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
-      }, btnScale);
-    } else {
-      let spacingX = Math.round(Phaser.Math.Clamp(W * 0.28, 260, 420));
-
-      let y = Math.round(H * 0.70);
-      if (y > Math.round(H * 0.82)) y = Math.round(H * 0.78);
-
-      this.createButton(cx - spacingX, y, 'ОБУЧЕНИЕ', () => {
-        this.safeStartWithLoader('TutorialScene', { index: 0 }, enqueueTutorialAssets);
-      }, btnScale);
-
-      this.createButton(cx, y, 'НОВАЯ ИГРА', () => {
-        this.safeStartWithLoader('GameScene', {}, enqueueGameAssets);
-      }, btnScale);
-
-      this.createButton(cx + spacingX, y, 'НАСТРОЙКИ', () => {
-        this.safeStartWithLoader('SettingsScene', {}, enqueueSettingsAssets);
-      }, btnScale);
-    }
-
-    // ---------- Иконки "Награды" и "Статистика" ----------
-    const iconSize = getUIIconSize(this);
-
-    let xDesign, yDesign;
-    if (isSquarish) {
-      const padX = Math.round(Phaser.Math.Clamp(L.DW * 0.06, 40, 70));
-      const padY = 480;
-      xDesign = L.DW - padX;
-      yDesign = padY;
-    } else {
-      const padX = 92;
-      const padY = 92;
-      xDesign = L.DW - padX;
-      yDesign = padY;
-    }
-
-    const p = dxy(L, xDesign, yDesign);
-
-    const rewardsIcon = this.add.image(p.x, p.y, 'icon_rewards')
-      .setOrigin(0.5)
-      .setDepth(50)
-      .setScrollFactor(0);
-
-    applyRoundIcon(this, rewardsIcon, iconSize, 1.35);
-    rewardsIcon.input.useHandCursor = true;
-    this.ui.rewardsIcon = rewardsIcon;
-
-    let restScale = rewardsIcon._baseScale || rewardsIcon.scale;
-
-    const badgeR = Math.round(iconSize * 0.14);
-    const badge = this.add.circle(
-      rewardsIcon.x + Math.round(iconSize * 0.40),
-      rewardsIcon.y - Math.round(iconSize * 0.34),
-      badgeR,
-      0xB93A3A
-    )
-      .setDepth(60)
-      .setScrollFactor(0)
-      .setVisible(false);
-
-    this.ui.badge = badge;
-
-    let pulseTween = null;
-    let isHovering = false;
-
-    const stopPulse = () => {
-      if (pulseTween) {
-        pulseTween.stop();
-        pulseTween = null;
-      }
-      this.ui.pulseTween = null;
-    };
-
-    const startPulse = () => {
-      if (isHovering) return;
-
-      stopPulse();
-      this.tweens.killTweensOf(rewardsIcon);
-      rewardsIcon.setScale(restScale);
-
-      pulseTween = this.tweens.add({
-        targets: rewardsIcon,
-        scale: restScale * 1.08,
-        duration: 520,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut'
-      });
-
-      this.ui.pulseTween = pulseTween;
-    };
-
-    const applyRest = () => {
-      stopPulse();
-      this.tweens.killTweensOf(rewardsIcon);
-      rewardsIcon.setScale(restScale);
-    };
-
-    const updateBadgeAndPulse = () => {
-      const hasNew = (window.Storage && typeof window.Storage.hasNewAchievements === 'function')
-        ? window.Storage.hasNewAchievements()
-        : false;
-
-      badge.setVisible(!!hasNew);
-      if (hasNew) startPulse();
-      else applyRest();
-    };
-
-    updateBadgeAndPulse();
-
-    const onNew = () => {
-      restScale = rewardsIcon.scale;
-      updateBadgeAndPulse();
-    };
-    this.ui.onNewHandler = onNew;
-    window.addEventListener('achievements:new', onNew);
-
-    this.events.once('shutdown', () => {
-      if (this.ui && this.ui.onNewHandler) {
-        try { window.removeEventListener('achievements:new', this.ui.onNewHandler); } catch (e) {}
-        this.ui.onNewHandler = null;
-      }
-      stopPulse();
+  rewardsIcon.on('pointerover', () => {
+    isHovering = true;
+    stopPulse();
+    this.tweens.killTweensOf(rewardsIcon);
+    this.tweens.add({
+      targets: rewardsIcon,
+      scale: restScale * 1.08,
+      duration: 140,
+      ease: 'Power1'
     });
+  });
 
-    rewardsIcon.on('pointerup', () => {
-      this.game.events.emit('ui:click');
-      window.openRewardsOverlay('MenuScene');
+  rewardsIcon.on('pointerout', () => {
+    isHovering = false;
+    this.tweens.killTweensOf(rewardsIcon);
+    this.tweens.add({
+      targets: rewardsIcon,
+      scale: restScale,
+      duration: 140,
+      ease: 'Power1',
+      onComplete: () => updateBadgeAndPulse()
     });
+  });
 
-    rewardsIcon.on('pointerover', () => {
-      isHovering = true;
-      stopPulse();
-      this.tweens.killTweensOf(rewardsIcon);
-      this.tweens.add({
-        targets: rewardsIcon,
-        scale: restScale * 1.08,
-        duration: 140,
-        ease: 'Power1'
-      });
+  rewardsIcon.on('pointerdown', () => {
+    this.game.events.emit('ui:click');
+    stopPulse();
+    this.tweens.killTweensOf(rewardsIcon);
+    this.tweens.add({
+      targets: rewardsIcon,
+      scale: restScale * 0.92,
+      duration: 90,
+      ease: 'Power1'
     });
+  });
 
-    rewardsIcon.on('pointerout', () => {
-      isHovering = false;
-      this.tweens.killTweensOf(rewardsIcon);
-      this.tweens.add({
-        targets: rewardsIcon,
-        scale: restScale,
-        duration: 140,
-        ease: 'Power1',
-        onComplete: () => updateBadgeAndPulse()
-      });
-    });
+  // Статистика под наградами
+  const gap = isSmallScreen ? 1.10 : 1.25;
+  const statsY = rewardsIcon.y + Math.round(iconSize * gap);
 
-    rewardsIcon.on('pointerdown', () => {
-      this.game.events.emit('ui:click');
-      stopPulse();
-      this.tweens.killTweensOf(rewardsIcon);
-      this.tweens.add({
-        targets: rewardsIcon,
-        scale: restScale * 0.92,
-        duration: 90,
-        ease: 'Power1'
-      });
-    });
+  const statsIcon = this.add.image(rewardsIcon.x, statsY, 'icon_stats')
+    .setOrigin(0.5)
+    .setDepth(50)
+    .setScrollFactor(0);
 
-    // Статистика под наградами
-    const gap = isSmallScreen ? 1.10 : 1.25;
-    const statsY = rewardsIcon.y + Math.round(iconSize * gap);
+  applyRoundIcon(this, statsIcon, iconSize, 1.35);
+  statsIcon.input.useHandCursor = true;
+  this.ui.statsIcon = statsIcon;
 
-    const statsIcon = this.add.image(rewardsIcon.x, statsY, 'icon_stats')
-      .setOrigin(0.5)
-      .setDepth(50)
-      .setScrollFactor(0);
+  const statsRestScale = statsIcon.scale;
 
-    applyRoundIcon(this, statsIcon, iconSize, 1.35);
-    statsIcon.input.useHandCursor = true;
-    this.ui.statsIcon = statsIcon;
+  statsIcon.on('pointerup', () => {
+    this.game.events.emit('ui:click');
+    try { sessionStorage.setItem('skip_auto_resume', '1'); } catch (e) {}
+    this.openStatsPopup();
+  });
 
-    const statsRestScale = statsIcon.scale;
+  statsIcon.on('pointerover', () => {
+    this.tweens.killTweensOf(statsIcon);
+    this.tweens.add({ targets: statsIcon, scale: statsRestScale * 1.08, duration: 140, ease: 'Power1' });
+  });
 
-    statsIcon.on('pointerup', () => {
-      this.game.events.emit('ui:click');
-      this.openStatsPopup();
-    });
+  statsIcon.on('pointerout', () => {
+    this.tweens.killTweensOf(statsIcon);
+    this.tweens.add({ targets: statsIcon, scale: statsRestScale, duration: 140, ease: 'Power1' });
+  });
 
-    statsIcon.on('pointerover', () => {
-      this.tweens.killTweensOf(statsIcon);
-      this.tweens.add({ targets: statsIcon, scale: statsRestScale * 1.08, duration: 140, ease: 'Power1' });
-    });
-
-    statsIcon.on('pointerout', () => {
-      this.tweens.killTweensOf(statsIcon);
-      this.tweens.add({ targets: statsIcon, scale: statsRestScale, duration: 140, ease: 'Power1' });
-    });
-
-    statsIcon.on('pointerdown', () => {
-      this.game.events.emit('ui:click');
-      this.tweens.killTweensOf(statsIcon);
-      this.tweens.add({ targets: statsIcon, scale: statsRestScale * 0.92, duration: 90, ease: 'Power1' });
-    });
-  }
+  statsIcon.on('pointerdown', () => {
+    this.game.events.emit('ui:click');
+    this.tweens.killTweensOf(statsIcon);
+    this.tweens.add({ targets: statsIcon, scale: statsRestScale * 0.92, duration: 90, ease: 'Power1' });
+  });
+}
 
   openStatsPopup() {
     if (this._statsPopupOpen) return;
@@ -1207,8 +1262,6 @@ class MenuScene extends Phaser.Scene {
     this.destroyButtons();
 
     // выключаем DOM видео, чтобы не висело поверх других сцен
-    const v = document.getElementById('menu-bg-video');
-    if (v) v.style.display = 'none';
 
     // стопаем твины этой сцены
     this.tweens.getAllTweens().forEach(t => t.stop());
@@ -1338,7 +1391,11 @@ const m = getScreenMode(this);
     this.homeBtn.input.useHandCursor = true;
 
     addHoverPress(this.homeBtn, this.homeBtn._baseScale || this.homeBtn.scale);
-    this.homeBtn.on('pointerup', () => this.scene.start('MenuScene'));
+    this.homeBtn.on('pointerup', () => {
+  try { sessionStorage.setItem('skip_auto_resume', '1'); } catch (e) {}
+  this.scene.start('MenuScene');
+});
+
 
     // ===== Назад (если не первый) — снизу слева =====
     if (!isFirst) {
@@ -1853,6 +1910,10 @@ class GameScene extends Phaser.Scene {
 
   // ====== required by you ======
 computeLayoutParams() {
+  const CARD_ZOOM = 1.18; // 1.10–1.25 по вкусу
+
+  const W = this.scale.width;
+  const H = this.scale.height;
 
   // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
   this.PADDING = Math.round(Math.max(8, W * 0.02));
@@ -1866,10 +1927,11 @@ computeLayoutParams() {
   let cardW = Math.floor(availableW / 7);
 
   // страховочные границы
-  cardW = Phaser.Math.Clamp(cardW, 48, 160);
+  cardW = Phaser.Math.Clamp(cardW, 48, 110);
 
-  this.CARD_W = cardW;
+  this.CARD_W = Math.round(cardW * CARD_ZOOM);
   this.CARD_H = Math.round(this.CARD_W * 1.44);
+
 
   // шаги всегда одни и те же (никаких портретных коэффициентов)
   const downMul = 0.15;
@@ -1886,130 +1948,187 @@ computeLayoutParams() {
 
   // ====== create ======
 create() {
+  try { sessionStorage.setItem('last_scene', 'game'); } catch (e) {}
+
+
   this.cameras.main.roundPixels = true;
 
-  // ===== ПАУЗА ТАЙМЕРА ПРИ СВОРАЧИВАНИИ ОКНА =====
-  const pauseIfActive = () => {
-    if (window.Session && typeof window.Session.pause === 'function') window.Session.pause();
-    this.pauseGameTimerUI();
-  };
+// ===== ПАУЗА ТАЙМЕРА ПРИ СВОРАЧИВАНИИ ОКНА =====
 
-  const resumeIfActive = () => {
-    if (!this._isGameActive) return;
-    if (window.Session && typeof window.Session.resume === 'function') window.Session.resume();
-    this.resumeGameTimerUI();
-  };
+const pauseIfActive = () => {
+  if (window.Session && typeof window.Session.pause === 'function') window.Session.pause();
+  this.pauseGameTimerUI();
+};
 
-  this._onVisibilityChange = () => {
-    if (document.hidden) pauseIfActive();
-    else resumeIfActive();
-  };
+const resumeIfActive = () => {
+  if (!this._isGameActive) return;
+  if (window.Session && typeof window.Session.resume === 'function') window.Session.resume();
+  this.resumeGameTimerUI();
+};
 
-  this._onBlur = () => pauseIfActive();
-  this._onFocus = () => resumeIfActive();
+this._onVisibilityChange = () => {
+  if (document.hidden) pauseIfActive();
+  else resumeIfActive();
+};
 
-  this._onPageHide = () => pauseIfActive();
-  this._onPageShow = () => resumeIfActive();
+this._onBlur = () => pauseIfActive();
+this._onFocus = () => resumeIfActive();
 
-  this._onFreeze = () => pauseIfActive();
-  this._onResume = () => resumeIfActive();
+this._onPageHide = () => pauseIfActive();
+this._onPageShow = () => resumeIfActive();
 
-  document.addEventListener('visibilitychange', this._onVisibilityChange);
-  window.addEventListener('blur', this._onBlur);
-  window.addEventListener('focus', this._onFocus);
-  window.addEventListener('pagehide', this._onPageHide);
-  window.addEventListener('pageshow', this._onPageShow);
-  document.addEventListener('freeze', this._onFreeze);
-  document.addEventListener('resume', this._onResume);
+this._onFreeze = () => pauseIfActive();
+this._onResume = () => resumeIfActive();
 
-  this.events.once('shutdown', () => {
-    document.removeEventListener('visibilitychange', this._onVisibilityChange);
-    window.removeEventListener('blur', this._onBlur);
-    window.removeEventListener('focus', this._onFocus);
-    window.removeEventListener('pagehide', this._onPageHide);
-    window.removeEventListener('pageshow', this._onPageShow);
-    document.removeEventListener('freeze', this._onFreeze);
-    document.removeEventListener('resume', this._onResume);
-  });
+document.addEventListener('visibilitychange', this._onVisibilityChange);
+window.addEventListener('blur', this._onBlur);
+window.addEventListener('focus', this._onFocus);
+window.addEventListener('pagehide', this._onPageHide);
+window.addEventListener('pageshow', this._onPageShow);
+document.addEventListener('freeze', this._onFreeze);
+document.addEventListener('resume', this._onResume);
 
-  // --- init/layout ---
-  this.loadSettings();
-  this.computeLayoutParams();
-  this.buildLayout();
+this.events.once('shutdown', () => {
+  document.removeEventListener('visibilitychange', this._onVisibilityChange);
+  window.removeEventListener('blur', this._onBlur);
+  window.removeEventListener('focus', this._onFocus);
+  window.removeEventListener('pagehide', this._onPageHide);
+  window.removeEventListener('pageshow', this._onPageShow);
+  document.removeEventListener('freeze', this._onFreeze);
+  document.removeEventListener('resume', this._onResume);
+});
 
-  this.createBackground();
-  this.createSlotsGraphics();
-  this.createUIButtons();
-  this.createGameTimerUI();
+// если раньше где-то поставили запрет авто-resume - снимаем его при входе в игру
+try { sessionStorage.removeItem('skip_auto_resume'); } catch (e) {}
 
-  this.createInputHandlers();
-  this.input.setTopOnly(true);
 
-  this.newGame();
+    this.loadSettings();
+    this.computeLayoutParams();
+    this.buildLayout();
 
-  // --- resize hooks ---
-  this.scale.on('resize', this.onResize, this);
+    this.createBackground();
+    this.createSlotsGraphics();
+    this.createUIButtons();
+    this.createGameTimerUI();
 
-  const fixAfterFullscreen = () => {
-    // обновить размеры/позицию canvas в DOM
-    if (this.scale && typeof this.scale.refresh === 'function') {
-      this.scale.refresh();
-    }
-    // updateBounds находится в ScaleManager
-    if (this.scale && typeof this.scale.updateBounds === 'function') {
-      this.scale.updateBounds();
-    }
+    this.createInputHandlers();
+    this.input.setTopOnly(true);
 
-    // пересчет лейаута + хитбоксов
-    this.onResize();
-    if (typeof this.updateStockHitArea === 'function') this.updateStockHitArea();
-  };
-
-  // НЕ делаем два enterfullscreen - оставляем один
-  this.scale.on('enterfullscreen', () => {
-    this.time.delayedCall(150, fixAfterFullscreen);
-  });
-
-  this.scale.on('leavefullscreen', () => {
-    this.time.delayedCall(0, () => {
-      if (typeof this.updateStockHitArea === 'function') this.updateStockHitArea();
-    });
-  });
-
-  this.events.once('shutdown', this.onShutdown, this);
-  this.events.once('destroy', this.onShutdown, this);
-
-  // --- Card SFX state ---
-  const saved = JSON.parse(localStorage.getItem('solitaire-settings') || '{}');
-  this.sfxEnabled = saved.soundOn !== undefined ? saved.soundOn : true;
-
-  // разлочено ли аудио (после первого клика)
-  this.audioUnlocked = !!this.game.audioUnlocked;
-
-  // создаем звуки (но играть будем только если enabled + unlocked)
-  this.sndCardPick = this.sound.add('klikcard', { volume: 0.6 });
-  this.sndCardPlace = this.sound.add('klakcard', { volume: 0.6 });
-
-  // слушаем смену тумблера Sounds из настроек
-  this.game.events.on('sfx:setEnabled', (v) => {
-    this.sfxEnabled = !!v;
-    if (typeof attachDebugKeys === 'function') attachDebugKeys();
-  });
-
-  // слушаем глобальную разлочку от первого клика (MusicScene эмитит)
-  this.game.events.on('audio:unlocked', () => {
-    this.audioUnlocked = true;
-  });
-
-  // ---- win audio objects (создаем один раз) ----
-  if (!this.winMusic) {
-    this.winMusic = this.sound.add('winmusic', { loop: false, volume: WIN_MUSIC_VOLUME });
-  }
-  if (!this.winVoice) {
-    this.winVoice = this.sound.add('winvoice', { loop: false, volume: WIN_VOICE_VOLUME });
-  }
+var saved = null;
+if (window.SaveGame && window.SaveGame.load) {
+  saved = window.SaveGame.load();
 }
 
+// Разрешаем восстановление ТОЛЬКО если перезагрузка была из "живой игры"
+var ctx = 'menu';
+try { ctx = sessionStorage.getItem('resume_context') || 'menu'; } catch (e) {}
+if (ctx !== 'game_active') {
+  saved = null;
+}
+
+
+if (saved && window.SaveGame && window.SaveGame.applyStateToScene) {
+  // Нужно создать структуру карт/колоды, но НЕ затирать сохранение
+  this.__restoring = true;
+  this.newGame(); // создаст карты/мапы/спрайты
+  window.SaveGame.applyStateToScene(this, saved);
+  this.__restoring = false;
+
+  // на всякий случай сразу пересохраним уже восстановленное
+  if (window.SaveGame && window.SaveGame.save) window.SaveGame.save(this);
+} else {
+  // если сохранения нет - обычная новая игра
+  this.newGame();
+}
+
+try { sessionStorage.setItem('resume_context', 'game_active'); } catch (e) {}
+
+
+// === SAVE ON PAGE RELOAD/CLOSE (once) ===
+if (!window.__savegame_beforeunload_added) {
+  window.__savegame_beforeunload_added = true;
+
+  window.addEventListener('beforeunload', () => {
+    if (window.SaveGame && window.SaveGame.save && window.__phaserGameScene) {
+      window.SaveGame.save(window.__phaserGameScene);
+    }
+  });
+}
+
+// keep pointer to current scene for beforeunload
+window.__phaserGameScene = this;
+
+
+    this.scale.on('resize', this.onResize, this);
+
+const fixAfterFullscreen = () => {
+  // обновить размеры/позицию canvas в DOM
+  if (this.scale && typeof this.scale.refresh === 'function') {
+    this.scale.refresh();
+  }
+
+  // ВАЖНО: updateBounds находится в ScaleManager
+  if (this.scale && typeof this.scale.updateBounds === 'function') {
+    this.scale.updateBounds();
+  }
+
+  // пересчет лейаута + хитбоксов
+  this.onResize();
+  this.updateStockHitArea?.();
+};
+
+
+this.scale.on('enterfullscreen', () => {
+  this.time.delayedCall(150, fixAfterFullscreen);
+});
+
+    this.scale.on('enterfullscreen', () => {
+    this.time.delayedCall(0, () => this.updateStockHitArea());
+    });
+
+    this.scale.on('leavefullscreen', () => {
+    this.time.delayedCall(0, () => this.updateStockHitArea());
+    });
+
+
+    this.events.once('shutdown', this.onShutdown, this);
+    this.events.once('destroy', this.onShutdown, this);
+
+    // --- Card SFX state ---
+    const sfxSettings = JSON.parse(localStorage.getItem('solitaire-settings') || '{}');
+    this.sfxEnabled = sfxSettings.soundOn !== undefined ? sfxSettings.soundOn : true;
+
+
+    // разлочено ли аудио (после первого клика)
+    this.audioUnlocked = !!this.game.audioUnlocked;
+
+    // создаем звуки (но играть будем только если enabled + unlocked)
+    this.sndCardPick = this.sound.add('klikcard', { volume: 0.6 });
+    this.sndCardPlace = this.sound.add('klakcard', { volume: 0.6 });
+
+    // слушаем смену тумблера Sounds из настроек
+    this.game.events.on('sfx:setEnabled', (v) => {
+    this.sfxEnabled = !!v;
+
+    if (typeof attachDebugKeys === 'function') attachDebugKeys();
+
+  });
+
+  
+
+// слушаем глобальную разлочку от первого клика (MusicScene эмитит)
+this.game.events.on('audio:unlocked', () => {
+  this.audioUnlocked = true;
+});
+
+// ---- win audio objects (создаем один раз) ----
+if (!this.winMusic) {
+  this.winMusic = this.sound.add('winmusic', { loop: false, volume: WIN_MUSIC_VOLUME });
+}
+if (!this.winVoice) {
+  this.winVoice = this.sound.add('winvoice', { loop: false, volume: WIN_VOICE_VOLUME });
+}
+  }
 
   getAudioSettings() {
   // берем настройки единообразно
@@ -2078,7 +2197,8 @@ stopWinAudio() {
     this.draw3 = !!saved.draw3; // true = draw 3
   }
 
- buildLayout() {
+  // ====== layout ======
+buildLayout() {
   const W = this.scale.width;
   const H = this.scale.height;
 
@@ -2100,9 +2220,15 @@ stopWinAudio() {
     this.pos.foundationX[i] = foundationLeftX + i * (this.CARD_W + this.COL_GAP);
   }
 
-  this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2);
+  // НИКАКИХ портретных сдвигов
+  const topRowDown = 0;
+  const tableauMoreDown = 0;
 
-  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08);
+  // верхняя линия (stock/waste/foundation)
+  this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2) + topRowDown;
+
+  // поле (tableau)
+  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown;
 
   this.pos.tableauY =
     this.pos.topY +
@@ -2111,6 +2237,7 @@ stopWinAudio() {
     Math.round(this.CARD_H / 2) +
     TABLEAU_EXTRA_DOWN;
 
+  // фиксированный ограничитель (без isMobilePortrait)
   const clampK = 0.35;
 
   this.pos.tableauY = Math.min(
@@ -2118,8 +2245,6 @@ stopWinAudio() {
     Math.round(H * clampK) + TABLEAU_EXTRA_DOWN
   );
 }
-
-
 
 
   onResize() {
@@ -2234,208 +2359,248 @@ stopWinAudio() {
 
   // ====== UI buttons ======
   createUIButtons() {
+  const UI_ICON_SCALE = 0.65; // крути это число
 
-    const UI_ICON_SCALE = 0.65; // крути это число
+  // --- destroy old ---
+  this.ui = this.ui || {};
+  this._uiBase = this._uiBase || new Map();
 
-    // destroy old
-    for (const k of Object.keys(this.ui)) {
-      if (this.ui[k]) {
-        this.ui[k].removeAllListeners();
-        this.ui[k].destroy();
-        this.ui[k] = null;
-      }
-    }
-    this._uiBase.clear();
+  for (const k of Object.keys(this.ui)) {
+    const obj = this.ui[k];
+    if (!obj) continue;
 
-    // create
+    try {
+      // Phaser GameObjects usually have removeAllListeners when interactive
+      if (typeof obj.removeAllListeners === 'function') obj.removeAllListeners();
+    } catch (e) {}
 
-    this.ui.home = this.add.image(0, 0, 'icon_home').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.35) .setInteractive({ useHandCursor: true }).setDepth(5000);
-    this.ui.settings = this.add.image(0, 0, 'icon_sound')
-    .setOrigin(0.5)
-    .setScale(UI_ICON_SCALE * 0.35)
-    .setInteractive({ useHandCursor: true })
-    .setDepth(5000);
-    this.ui.undo = this.add.image(0, 0, 'icon_undo').setOrigin(0.5) .setScale(UI_ICON_SCALE * 0.35) .setInteractive({ useHandCursor: true }).setDepth(5000);
-    this.ui.restart = this.add.image(0, 0, 'icon_restart')
-    .setOrigin(0.5)
-    .setScale(UI_ICON_SCALE * 0.35)
-    .setInteractive({ useHandCursor: true })
-    .setDepth(5000);
-
-    
-
-    this.layoutUI();
-
-    // после layout база меняется -> обновляем базовые значения
-for (const k of ['home', 'settings', 'undo', 'restart']) {
-  const btn = this.ui[k];
-  if (!btn) continue;
-
-  // если attachCommon уже навешан - обновляем базу
-  if (btn.__saveBase) btn.__saveBase();
-
-  // и принудительно возвращаем к базе (убирает "залипший" hover после ресайза)
-  const base = this._uiBase.get(btn);
-  if (base) {
-    this.tweens.killTweensOf(btn);
-    btn.setScale(base.sx, base.sy);
-    btn.setAngle(base.angle || 0);
+    try { obj.destroy(); } catch (e) {}
+    this.ui[k] = null;
   }
-}
+  this._uiBase.clear();
 
+  // --- create ---
+  this.ui.home = this.add.image(0, 0, 'icon_home')
+    .setOrigin(0.5)
+    .setScale(UI_ICON_SCALE * 0.85)
+    .setInteractive({ useHandCursor: true })
+    .setDepth(5000);
 
-    // common hover/press scaling
-    const attachCommon = (btn) => {
-  const saveBase = () => {
-    this._uiBase.set(btn, { sx: btn.scaleX, sy: btn.scaleY, angle: btn.angle, x: btn.x, y: btn.y });
+  this.ui.settings = this.add.image(0, 0, 'icon_sound')
+    .setOrigin(0.5)
+    .setScale(UI_ICON_SCALE * 0.85)
+    .setInteractive({ useHandCursor: true })
+    .setDepth(5000);
+
+  this.ui.undo = this.add.image(0, 0, 'icon_undo')
+    .setOrigin(0.5)
+    .setScale(UI_ICON_SCALE * 0.85)
+    .setInteractive({ useHandCursor: true })
+    .setDepth(5000);
+
+  this.ui.restart = this.add.image(0, 0, 'icon_restart')
+    .setOrigin(0.5)
+    .setScale(UI_ICON_SCALE * 0.85)
+    .setInteractive({ useHandCursor: true })
+    .setDepth(5000);
+
+  // layout positions
+  this.layoutUI();
+
+  // --- common hover/press scaling ---
+  const attachCommon = (btn) => {
+    if (!btn) return;
+
+    const saveBase = () => {
+      this._uiBase.set(btn, {
+        sx: btn.scaleX,
+        sy: btn.scaleY,
+        angle: btn.angle,
+        x: btn.x,
+        y: btn.y
+      });
+    };
+
+    // save base right now (after layout)
+    saveBase();
+
+    const getBase = () => this._uiBase.get(btn) || { sx: btn.scaleX, sy: btn.scaleY, angle: btn.angle };
+
+    const tweenTo = (sx, sy, dur = 120) => {
+      this.tweens.killTweensOf(btn);
+      this.tweens.add({ targets: btn, scaleX: sx, scaleY: sy, duration: dur, ease: 'Power2' });
+    };
+
+    btn.on('pointerover', () => {
+      const base = getBase();
+      tweenTo(base.sx * 1.10, base.sy * 1.10, 140);
+    });
+
+    btn.on('pointerout', () => {
+      const base = getBase();
+      tweenTo(base.sx, base.sy, 140);
+    });
+
+    btn.on('pointerdown', () => {
+      this.game.events.emit('ui:click');
+      const base = getBase();
+      tweenTo(base.sx * 0.92, base.sy * 0.92, 80);
+    });
+
+    btn.on('pointerup', () => {
+      const base = getBase();
+      const over = btn.input && btn.input.over;
+      const mul = over ? 1.10 : 1.0;
+      tweenTo(base.sx * mul, base.sy * mul, 100);
+    });
+
+    // allow refresh after layout/resize
+    btn.__saveBase = saveBase;
   };
 
-  // сохраняем базу сразу после создания и layout
-  saveBase();
+  // --- special hover animations ---
+  const attachSettingsSpin180 = (btn) => {
+    if (!btn) return;
 
-  const tweenTo = (sx, sy, dur = 120) => {
-    this.tweens.killTweensOf(btn);
-    this.tweens.add({ targets: btn, scaleX: sx, scaleY: sy, duration: dur, ease: 'Power2' });
+    btn.on('pointerover', () => {
+      const base = this._uiBase.get(btn) || { angle: btn.angle };
+      this.tweens.killTweensOf(btn);
+      this.tweens.add({ targets: btn, angle: base.angle + 180, duration: 260, ease: 'Power2' });
+    });
+
+    btn.on('pointerout', () => {
+      const base = this._uiBase.get(btn) || { angle: btn.angle };
+      this.tweens.killTweensOf(btn);
+      this.tweens.add({ targets: btn, angle: base.angle, duration: 220, ease: 'Power2' });
+    });
   };
 
-  const getBase = () => this._uiBase.get(btn) || { sx: btn.scaleX, sy: btn.scaleY, angle: btn.angle };
+  const attachHomeVibrate = (btn) => {
+    if (!btn) return;
 
-  // ВАЖНО: при pointerover/out всегда берем базу из _uiBase (а не из замыкания)
-  btn.on('pointerover', () => {
-    const base = getBase();
-    tweenTo(base.sx * 1.10, base.sy * 1.10, 140);
-  });
-
-  btn.on('pointerout', () => {
-    const base = getBase();
-    tweenTo(base.sx, base.sy, 140);
-  });
-
-  btn.on('pointerdown', () => {
-    this.game.events.emit('ui:click');
-    const base = getBase();
-    tweenTo(base.sx * 0.92, base.sy * 0.92, 80);
-  });
-
-  btn.on('pointerup', () => {
-    const base = getBase();
-    const over = btn.input && btn.input.over;
-    const mul = over ? 1.10 : 1.0;
-    tweenTo(base.sx * mul, base.sy * mul, 100);
-  });
-
-  // вспомогательный метод: можно вызвать после ресайза, чтобы обновить базу
-  btn.__saveBase = saveBase;
-};
-
-
-    // special hover animations
-    const attachSettingsSpin180 = (btn) => {
-      btn.on('pointerover', () => {
-        this.tweens.killTweensOf(btn);
-        const base = this._uiBase.get(btn);
-        this.tweens.add({ targets: btn, angle: base.angle + 180, duration: 260, ease: 'Power2' });
+    btn.on('pointerover', () => {
+      const base = this._uiBase.get(btn) || { angle: btn.angle };
+      this.tweens.killTweensOf(btn);
+      this.tweens.timeline({
+        targets: btn,
+        tweens: [
+          { angle: -90, duration: 70, ease: 'Sine.easeOut' },
+          { angle: 90, duration: 90, ease: 'Sine.easeInOut' },
+          { angle: -45, duration: 70, ease: 'Sine.easeInOut' },
+          { angle: base.angle, duration: 70, ease: 'Sine.easeIn' }
+        ]
       });
-      btn.on('pointerout', () => {
-        const base = this._uiBase.get(btn);
-        this.tweens.killTweensOf(btn);
-        this.tweens.add({ targets: btn, angle: base.angle, duration: 220, ease: 'Power2' });
-      });
-    };
+    });
 
-    const attachHomeVibrate = (btn) => {
-      btn.on('pointerover', () => {
-        const base = this._uiBase.get(btn);
-        this.tweens.killTweensOf(btn);
-        this.tweens.timeline({
-          targets: btn,
-          tweens: [
-            { angle: -90, duration: 70, ease: 'Sine.easeOut' },
-            { angle: 90, duration: 90, ease: 'Sine.easeInOut' },   // -90 + 180
-            { angle: -45, duration: 70, ease: 'Sine.easeInOut' },
-            { angle: base.angle, duration: 70, ease: 'Sine.easeIn' }
-          ]
-        });
-      });
-      btn.on('pointerout', () => {
-        const base = this._uiBase.get(btn);
-        this.tweens.killTweensOf(btn);
-        this.tweens.add({ targets: btn, angle: base.angle, duration: 140, ease: 'Power2' });
-      });
-    };
+    btn.on('pointerout', () => {
+      const base = this._uiBase.get(btn) || { angle: btn.angle };
+      this.tweens.killTweensOf(btn);
+      this.tweens.add({ targets: btn, angle: base.angle, duration: 140, ease: 'Power2' });
+    });
+  };
 
-    const attachUndoSpin360 = (btn) => {
-      btn.on('pointerover', () => {
-        const base = this._uiBase.get(btn);
-        this.tweens.killTweensOf(btn);
-        this.tweens.add({ targets: btn, angle: base.angle + 360, duration: 650, ease: 'Sine.easeInOut' });
-      });
-      btn.on('pointerout', () => {
-        const base = this._uiBase.get(btn);
-        this.tweens.killTweensOf(btn);
-        this.tweens.add({ targets: btn, angle: base.angle, duration: 180, ease: 'Power2' });
-      });
-    };
+  const attachUndoSpin360 = (btn) => {
+    if (!btn) return;
 
-    // apply
-    attachCommon(this.ui.home);
-    attachCommon(this.ui.settings);
-    attachCommon(this.ui.undo);
-    attachCommon(this.ui.restart);
+    btn.on('pointerover', () => {
+      const base = this._uiBase.get(btn) || { angle: btn.angle };
+      this.tweens.killTweensOf(btn);
+      this.tweens.add({ targets: btn, angle: base.angle + 360, duration: 650, ease: 'Sine.easeInOut' });
+    });
 
-   attachSettingsSpin180(this.ui.settings); // для шестеренки лучше вращение
-attachHomeVibrate(this.ui.home);
-attachUndoSpin360(this.ui.undo);
+    btn.on('pointerout', () => {
+      const base = this._uiBase.get(btn) || { angle: btn.angle };
+      this.tweens.killTweensOf(btn);
+      this.tweens.add({ targets: btn, angle: base.angle, duration: 180, ease: 'Power2' });
+    });
+  };
 
-    // actions
-    this.ui.home.on('pointerup', () => {
-        this._isGameActive = false;
-     if (this.isWinPlaying) return;
+  // apply common + specials
+  attachCommon(this.ui.home);
+  attachCommon(this.ui.settings);
+  attachCommon(this.ui.undo);
+  attachCommon(this.ui.restart);
 
-     this.stopGameTimerUI();
+  attachSettingsSpin180(this.ui.settings);
+  attachHomeVibrate(this.ui.home);
+  attachUndoSpin360(this.ui.undo);
 
-     const payload = Session.abandon('home');
-     AchievementRules.onAbandon(payload);
-     AchievementRules.onExitToMenu?.();
+  // после layout база меняется -> обновляем базовые значения и снимаем "залипший hover"
+  for (const k of ['home', 'settings', 'undo', 'restart']) {
+    const btn = this.ui[k];
+    if (!btn) continue;
+
+    if (btn.__saveBase) btn.__saveBase();
+
+    const base = this._uiBase.get(btn);
+    if (base) {
+      this.tweens.killTweensOf(btn);
+      btn.setScale(base.sx, base.sy);
+      btn.setAngle(base.angle || 0);
+    }
+  }
+
+  // --- actions ---
+  this.ui.home.on('pointerup', () => {
+    this._isGameActive = false;
+    if (this.isWinPlaying) return;
+
+    this.stopGameTimerUI();
+
+    const payload = Session.abandon('home');
+    AchievementRules.onAbandon(payload);
+
+    if (AchievementRules.onExitToMenu) AchievementRules.onExitToMenu();
+
+    try { sessionStorage.setItem('force_menu', '1'); } catch (e) {}
+    try { sessionStorage.setItem('resume_context', 'menu'); } catch (e) {}
 
     this.scene.start('MenuScene');
-});
+  });
 
+  this.ui.settings.on('pointerup', () => {
+    if (this.isWinPlaying) return;
+    try { sessionStorage.setItem('skip_auto_resume', '1'); } catch (e) {}
+    this.openSoundPopup();
+  });
 
-    this.ui.settings.on('pointerup', () => {
-     if (this.isWinPlaying) return;
-     // быстрые настройки звука/музыки без выхода из игры
-     this.openSoundPopup();
-    });
+  this.ui.restart.on('pointerup', () => {
+    this._isGameActive = false;
+    if (this.isWinPlaying) return;
 
-    this.ui.restart.on('pointerup', () => {
-        this._isGameActive = false;
-     if (this.isWinPlaying) return;
+    if (this.input) this.input.enabled = false;
 
-     this.stopGameTimerUI();
+    this.stopGameTimerUI();
 
-     // игрок сдался (проигрыш по твоей логике)
-      const payload = Session.abandon('restart');
-      AchievementRules.onAbandon(payload);
+    const payload = Session.abandon('restart');
+    AchievementRules.onAbandon(payload);
 
+    const doRestart = () => {
+      if (this.input) this.input.enabled = true;
       this.newGame();
-    });
+    };
 
+    if (window.Platform && typeof window.Platform.showInterstitial === 'function') {
+      // finally гарантирует, что doRestart вызовется даже при ошибке/отказе/оффлайне
+      window.Platform.showInterstitial('restart').finally(doRestart);
+    } else {
+      doRestart();
+    }
+  });
 
-    this.ui.undo.on('pointerup', () => {
-     if (this.isWinPlaying) return;
-     if (!this.undoStack || this.undoStack.length === 0) return;
-     Session.addUndo();
-     this.undo();
-});
-  }
+  this.ui.undo.on('pointerup', () => {
+    if (this.isWinPlaying) return;
+    if (!this.undoStack || this.undoStack.length === 0) return;
+
+    Session.addUndo();
+    this.undo();
+  });
+}
 
 layoutUI() {
   const W = this.scale.width;
   const H = this.scale.height;
-  const SAFE_W = Math.min(W, H * 1.7);
-
-  const pad = Math.round(Math.max(10, Math.min(SAFE_W, H) * 0.03));
+  const pad = Math.round(Math.max(10, Math.min(W, H) * 0.03));
 
   const dev = this.sys.game.device;
 
@@ -2803,6 +2968,8 @@ showGameTimerUI() {
     this.relayoutAllCards(true);
   }
 
+
+
   clearAllCardSprites() {
     if (!this.cards || this.cards.size === 0) return;
     for (const card of this.cards.values()) {
@@ -2985,6 +3152,7 @@ onPointerUp(pointer) {
   }
 
   this.relayoutAllCards(false);
+  window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
 
   this.checkWin();
 }
@@ -3035,6 +3203,8 @@ snapBack(drag) {
 
   // привести расклад обратно (текстуры/позиции)
   this.relayoutAllCards(false);
+  window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
+
 }
 
 
@@ -3085,7 +3255,7 @@ snapBack(drag) {
   const x = this.pos.stockX + this.CARD_W / 2;
   const y = this.pos.topY;
 
-  // ВАЖНО: zone вместо rectangle (стабильнее при resize/fullscreen в Yandex)
+
   this.stockHit = this.add.zone(x, y, this.CARD_W, this.CARD_H)
     .setOrigin(0.5)
     .setScrollFactor(0)
@@ -3163,6 +3333,7 @@ snapBack(drag) {
 
       // animate: move last drawn to waste slot, others are hidden behind (since you said previous waste not visible)
       this.relayoutAllCards(false);
+      window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
       return;
     }
 
@@ -3185,6 +3356,8 @@ snapBack(drag) {
       });
 
       this.relayoutAllCards(false);
+      window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
+
     }
   }
 
@@ -3312,6 +3485,8 @@ if (dropTarget.type === 'foundation') {
   this.afterTableauReveal(fromLoc, action);
   this.pushUndo(action);
 
+  window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
+
   return true;
 }
 
@@ -3326,6 +3501,8 @@ if (dropTarget.type === 'tableau') {
 
   this.afterTableauReveal(fromLoc, action);
   this.pushUndo(action);
+
+  window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
 
   return true;
 }
@@ -3342,6 +3519,9 @@ if (dropTarget.type === 'tableau') {
 
   this.afterTableauReveal(fromLoc, action); // <-- теперь reveal записывает action.revealed
   this.pushUndo(action);                   // <-- undo получит revealed
+
+  window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
+
   return true;
 }
 
@@ -3439,6 +3619,8 @@ if (dropTarget.type === 'tableau') {
         this.stock.push(id);
       }
       this.relayoutAllCards(false);
+      window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
+
       return;
     }
 
@@ -3455,6 +3637,8 @@ if (dropTarget.type === 'tableau') {
         this.waste.push(id);
       }
       this.relayoutAllCards(false);
+      window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
+
       return;
     }
 
@@ -3496,6 +3680,8 @@ if (action.revealed != null) {
       }
 
       this.relayoutAllCards(false);
+      window.SaveGame && window.SaveGame.save && window.SaveGame.save(this);
+
       return;
     }
   }
@@ -3784,10 +3970,12 @@ if (htmlVideo) {
      this.showWinPopup();
   });
 
-  // когда видео дошло до конца: замираем на последнем кадре и показываем попап
-  this.winVideo.once('complete', () => {
-    this.showWinPopup();
-    });
+// когда видео дошло до конца: замираем на последнем кадре и показываем попап
+this.winVideo.once('complete', () => {
+  try { sessionStorage.setItem('skip_auto_resume', '1'); } catch (e) {}
+this.showWinPopup();
+});
+
   }
 
 
@@ -4007,17 +4195,20 @@ if (this.winOverlay) {
   this.input.enabled = false;
 
   const doAction = () => {
-    this.input.enabled = true;
+  this.input.enabled = true;
 
-    this.exitWinMode();
+  this.exitWinMode();
 
-    try { window.AchievementRules?.onExitToMenu?.(); } catch (e) {}
+  try { window.AchievementRules?.onExitToMenu?.(); } catch (e) {}
 
-    // переход строго после клика
-    this.time.delayedCall(0, () => {
-      this.scene.start('MenuScene');
-    });
-  };
+  // ВАЖНО: запретить auto-resume при заходе в меню
+  try { sessionStorage.setItem('force_menu', '1'); } catch (e) {}
+  try { sessionStorage.setItem('resume_context', 'menu'); } catch (e) {}
+
+  this.time.delayedCall(0, () => {
+    this.scene.start('MenuScene');
+  });
+};
 
   // сначала реклама, потом действие
   if (window.Platform && window.Platform.showInterstitial) {
@@ -4515,16 +4706,105 @@ config.scene = [Boot, LoadingScene, MenuScene, TutorialScene, SettingsScene, Gam
 })();
 
 
-const game = new Phaser.Game(config);
-window.__phaserGame = game;
+// 1️⃣ СНАЧАЛА объявляем game
+let game = null;
+
+// --- Fixed-aspect letterbox (design size stays constant, canvas scales in CSS) ---
+const DESIGN_W = 1920;
+const DESIGN_H = 1080;
+
+function applyLetterbox() {
+  const container = document.getElementById('game-container');
+  if (!container) return;
+
+  const canvas = (game && game.canvas)
+    ? game.canvas
+    : container.querySelector('canvas');
+  if (!canvas) return;
+
+  const cw = container.clientWidth || window.innerWidth;
+  const ch = container.clientHeight || window.innerHeight;
+
+  const s = Math.min(cw / DESIGN_W, ch / DESIGN_H);
+  const w = Math.max(1, Math.round(DESIGN_W * s));
+  const h = Math.max(1, Math.round(DESIGN_H * s));
+
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+
+  // 🔑 КЛЮЧЕВОЕ МЕСТО
+  canvas.style.margin = '0';          // <-- сбрасываем Phaser-margin
+  canvas.style.position = 'absolute';
+  canvas.style.left = '50%';
+  canvas.style.top = '50%';
+  canvas.style.transform = 'translate(-50%, -50%)';
+  canvas.style.display = 'block';
+
+  if (game && game.scale) {
+    try { game.scale.refresh(); } catch (e) {}
+    if (typeof game.scale.updateBounds === 'function') {
+      try { game.scale.updateBounds(); } catch (e) {}
+    }
+  }
+
+  console.log('letterbox', { cw, ch, s, w, h, DESIGN_W, DESIGN_H });
+}
+
+// Expose to index.html (it calls window.__applyLetterbox on resize)
+window.__applyLetterbox = applyLetterbox;
 
 
-window.__phaserGame = game;
 
-const refreshBounds = () => {
-  // обновляет реальные DOM bounds canvas -> корректные pointer координаты
-  game.scale.refresh();
-};
+// 2️⃣ СРАЗУ ПОСЛЕ — глобальная функция refreshBounds
+function refreshBounds() {
+  if (!game) return;
+
+  // keep CSS letterbox in sync
+  try { applyLetterbox(); } catch (e) {}
+
+  if (!game.scale || !game.canvas) return;
+  try { game.scale.refresh(); } catch (e) {
+    // на раннем старте Phaser canvas может быть еще не готов
+  }
+}
+
+// 3️⃣ ПОТОМ startPhaser
+function startPhaser() {
+  if (game) return;
+
+  game = new Phaser.Game(config);
+  // initial letterbox sizing
+  setTimeout(() => { try { applyLetterbox(); } catch (e) {} }, 0);
+  requestAnimationFrame(() => {
+  const el = document.getElementById('boot-loader');
+  if (el) el.style.display = 'none';
+});
+
+  window.__phaserGame = game;
+
+  // вызывать ТОЛЬКО после создания canvas
+  setTimeout(refreshBounds, 0);
+
+  window.addEventListener('resize', refreshBounds);
+}
+
+
+(async () => {
+  let initPromise = null;
+
+  try {
+    initPromise = window.Platform?.init?.(); // запускаем init, но не ждем
+  } catch (e) {}
+
+  // Phaser стартует сразу -> Boot/LoadingScene покажутся без паузы
+  startPhaser();
+
+  // если нужно - дождемся платформы уже "в фоне"
+  try {
+    await initPromise;
+  } catch (e) {}
+})();
+
 
 // на всякий случай
 window.addEventListener('resize', refreshBounds);
