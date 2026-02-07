@@ -1913,33 +1913,26 @@ computeLayoutParams() {
   const W = this.scale.width;
   const H = this.scale.height;
 
-  // ================== НАСТРОЙКИ ==================
-  const CARD_SCALE_FACTOR = 1.25;   // увеличивай ТОЛЬКО это
-  const X_SPACING_FACTOR  = 1.06;   // раздвижка колонок
+  const CARD_SCALE_FACTOR = 1.25;   // только это крути
+  const X_SPACING_FACTOR  = 1.06;
   const SAFE_MARGIN       = 8;
 
-  // фиксированные дизайн-значения
-  const BASE_PADDING = 16;
-  const BASE_GAP     = 12;
+  // ✅ Вернули как было (чтобы верхний ряд не уезжал)
+  this.PADDING = Math.round(Math.max(8, W * 0.02));
+  this.COL_GAP = Math.round(Math.max(6, W * 0.01));
 
-  this.PADDING = BASE_PADDING;
-  this.COL_GAP = BASE_GAP;
+  // базовый cardW "как раньше" (до увеличения)
+  const availableW0 = W - this.PADDING * 2 - this.COL_GAP * 6;
+  const baseCardW = Math.floor(availableW0 / 7);
 
-  // ================== CARD SIZE ==================
-  // базовая ширина карты из доступного пространства
-  const availableW = W - this.PADDING * 2 - this.COL_GAP * 6;
-  let cardW = Math.floor(availableW / 7);
+  // ✅ сохраняем базовые размеры (для компенсации Y)
+  this.BASE_CARD_W = baseCardW;
+  this.BASE_CARD_H = Math.round(baseCardW * 1.44);
 
   // увеличиваем карты
-  cardW = Math.round(cardW * CARD_SCALE_FACTOR);
+  let cardW = Math.round(baseCardW * CARD_SCALE_FACTOR);
 
-  // ================== FIT ПО ШИРИНЕ ==================
-  const getTotalWidth = (cw) => {
-    const stepX = Math.round((cw + this.COL_GAP) * X_SPACING_FACTOR);
-    return 7 * cw + 6 * stepX + 2 * this.PADDING;
-  };
-
-  // если не влезает — ограничиваем ТОЛЬКО размер карты
+  // fit по ширине с учетом X_SPACING_FACTOR (gap/padding НЕ трогаем)
   const maxAllowedW = (() => {
     const avail = W - 2 * SAFE_MARGIN - 2 * this.PADDING;
     const k = X_SPACING_FACTOR;
@@ -1949,35 +1942,24 @@ computeLayoutParams() {
   })();
 
   cardW = Math.min(cardW, maxAllowedW);
+  cardW = Phaser.Math.Clamp(cardW, 48, 220);
 
-  // финальный clamp (на всякий случай)
-  cardW = Phaser.Math.Clamp(cardW, 48, 200);
-
-  // ================== APPLY ==================
   this.CARD_W = cardW;
   this.CARD_H = Math.round(this.CARD_W * 1.44);
 
-  // шаги по Y (как у тебя было)
+  // шаги по Y можешь оставить от CARD_H (или от BASE_CARD_H - если хочешь прежнюю "лесенку")
   this.TABLEAU_STEP_DOWN = Math.round(Math.max(10, this.CARD_H * 0.15));
   this.TABLEAU_STEP_UP   = Math.round(Math.max(12, this.CARD_H * 0.18));
 
-  // слоты пропорционально картам
+  // слоты - как у тебя (если хочешь пропорционально картам - умножай)
   this.SLOT_INSET  = 6;
   this.SLOT_LINE   = 2;
   this.SLOT_RADIUS = 20;
 
-  // шаг по X (ОБЯЗАТЕЛЬНО использовать его в buildLayout)
+  // шаг по X (используется в buildLayout)
   this.STEP_X = Math.round((this.CARD_W + this.COL_GAP) * X_SPACING_FACTOR);
-
-  // ================== DEBUG ==================
-  console.log('layout', {
-    CARD_W: this.CARD_W,
-    COL_GAP: this.COL_GAP,
-    STEP_X: this.STEP_X,
-    totalW: getTotalWidth(this.CARD_W),
-    W
-  });
 }
+
 
   // ====== create ======
 create() {
@@ -2230,27 +2212,34 @@ stopWinAudio() {
     this.draw3 = !!saved.draw3; // true = draw 3
   }
 
-  // ====== layout ======
+// ====== layout ======
 buildLayout() {
   const W = this.scale.width;
   const H = this.scale.height;
 
-  const totalTableauW = 7 * this.CARD_W + 6 * this.COL_GAP;
+  // шаг по X: если есть STEP_X (с раздвижкой) - используем его, иначе обычный
+  const stepX = this.STEP_X ?? (this.CARD_W + this.COL_GAP);
+  const gapX = stepX - this.CARD_W;
+
+  // ширина tableau по краям карт
+  const totalTableauW = 7 * this.CARD_W + 6 * gapX;
   const leftX = Math.round((W - totalTableauW) / 2);
 
   for (let i = 0; i < 7; i++) {
-    this.pos.tableauX[i] = leftX + i * (this.CARD_W + this.COL_GAP);
+    // pos.tableauX хранит ЛЕВЫЙ КРАЙ колонки
+    this.pos.tableauX[i] = leftX + i * stepX;
   }
 
   this.pos.stockX = this.pos.tableauX[0];
-  this.pos.wasteX = this.pos.stockX + (this.CARD_W + this.COL_GAP);
+  this.pos.wasteX = this.pos.stockX + stepX;
 
   const rightEdgeTableau = this.pos.tableauX[6] + this.CARD_W;
-  const totalFoundationW = 4 * this.CARD_W + 3 * this.COL_GAP;
+
+  const totalFoundationW = 4 * this.CARD_W + 3 * gapX;
   const foundationLeftX = rightEdgeTableau - totalFoundationW;
 
   for (let i = 0; i < 4; i++) {
-    this.pos.foundationX[i] = foundationLeftX + i * (this.CARD_W + this.COL_GAP);
+    this.pos.foundationX[i] = foundationLeftX + i * stepX;
   }
 
   // НИКАКИХ портретных сдвигов
@@ -2260,8 +2249,13 @@ buildLayout() {
   // верхняя линия (stock/waste/foundation)
   this.pos.topY = this.PADDING + Math.round(this.CARD_H / 2) + topRowDown;
 
+  // ✅ компенсируем рост высоты карты, чтобы вертикальные расстояния остались "как раньше"
+  const baseH = (this.BASE_CARD_H || this.CARD_H);
+  const dH = this.CARD_H - baseH;
+  const keepGapComp = Math.round(1.5 * dH);
+
   // поле (tableau)
-  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown;
+  const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown - keepGapComp;
 
   this.pos.tableauY =
     this.pos.topY +
