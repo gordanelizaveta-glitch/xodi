@@ -1910,40 +1910,74 @@ class GameScene extends Phaser.Scene {
 
   // ====== required by you ======
 computeLayoutParams() {
-  const CARD_ZOOM = 1.28; // 1.10–1.25 по вкусу
-
   const W = this.scale.width;
   const H = this.scale.height;
 
-  // Паддинги и зазор берем заранее, чтобы карты точно влезали по ширине
-  this.PADDING = Math.round(Math.max(8, W * 0.02));
+  // --- НАСТРОЙКИ ТОЛЬКО ДЛЯ КАРТ ---
+  const CARD_SCALE_FACTOR = 1.18;  // <-- увеличивай это, чтобы карты стали больше (1.10 / 1.15 / 1.20)
+  const X_SPACING_FACTOR  = 1.06;  // раздвижка по X (оставь как есть)
+  const SAFE_MARGIN       = 8;
 
-  // базовый gap (не привязываем к cardW, чтобы не раздувать на мобилке)
-  const gapBase = Math.round(Math.max(6, W * 0.01));
-  this.COL_GAP = gapBase;
+  // фиксированные "дизайн" паддинги/гэпы (чтобы не душить cardW)
+  this.PADDING = 16;
+  this.COL_GAP = 12;
 
-  // считаем cardW так, чтобы 7 колонок гарантированно влезли
-  const availableW = W - this.PADDING * 2 - this.COL_GAP * 6;
-  let cardW = Math.floor(availableW / 7);
+  // базовый cardW из доступной ширины
+  const availableW0 = W - this.PADDING * 2 - this.COL_GAP * 6;
+  let cardW = Math.floor(availableW0 / 7);
 
-  // страховочные границы
-  cardW = Phaser.Math.Clamp(cardW, 48, 110);
+  // увеличиваем карты
+  cardW = Math.floor(cardW * CARD_SCALE_FACTOR);
 
-  this.CARD_W = Math.round(cardW * CARD_ZOOM);
+  // больше не режем до 116 - поднимаем потолок
+  cardW = Phaser.Math.Clamp(cardW, 48, 180);
+
+  // проверка влезания с учетом X_SPACING_FACTOR
+  const fitsWithXSpacing = () => {
+    const stepX = Math.round((cardW + this.COL_GAP) * X_SPACING_FACTOR);
+    const total = 7 * cardW + 6 * stepX + 2 * this.PADDING;
+    return total <= (W - 2 * SAFE_MARGIN);
+  };
+
+  // если не влезает - сначала ужимаем gap/padding, потом уже cardW
+  if (!fitsWithXSpacing()) {
+    while (this.COL_GAP > 6 && !fitsWithXSpacing()) this.COL_GAP -= 1;
+    while (this.PADDING > 10 && !fitsWithXSpacing()) this.PADDING -= 1;
+
+    if (!fitsWithXSpacing()) {
+      const k = X_SPACING_FACTOR;
+      const avail = (W - 2 * SAFE_MARGIN) - 2 * this.PADDING;
+      const denom = 7 + 6 * k;
+      const numer = avail - 6 * k * this.COL_GAP;
+      const cwMax = Math.floor(numer / denom);
+      cardW = Phaser.Math.Clamp(cwMax, 48, 180);
+    }
+  }
+
+  this.CARD_W = cardW;
   this.CARD_H = Math.round(this.CARD_W * 1.44);
 
-
-  // шаги всегда одни и те же (никаких портретных коэффициентов)
+  // шаги (как у тебя было)
   const downMul = 0.15;
   const upMul   = 0.18;
-
   this.TABLEAU_STEP_DOWN = Math.round(Math.max(10, this.CARD_H * downMul));
   this.TABLEAU_STEP_UP   = Math.round(Math.max(12, this.CARD_H * upMul));
 
-  // слоты (без портретных правок)
-  this.SLOT_INSET = 6;
-  this.SLOT_LINE = 2;
+  // слоты пропорционально картам
+  this.SLOT_INSET  = 6;
+  this.SLOT_LINE   = 2;
   this.SLOT_RADIUS = 20;
+
+  // шаг по X (важно: использовать его в buildLayout)
+  this.STEP_X = Math.round((this.CARD_W + this.COL_GAP) * X_SPACING_FACTOR);
+
+  console.log('layout', {
+    W, H,
+    CARD_W: this.CARD_W,
+    COL_GAP: this.COL_GAP,
+    PADDING: this.PADDING,
+    STEP_X: this.STEP_X
+  });
 }
 
   // ====== create ======
