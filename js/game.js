@@ -1910,7 +1910,7 @@ class GameScene extends Phaser.Scene {
 
   // ====== required by you ======
 computeLayoutParams() {
-  const CARD_ZOOM = 1.18; // 1.10–1.25 по вкусу
+  const CARD_ZOOM = 1.28; // 1.10–1.25 по вкусу
 
   const W = this.scale.width;
   const H = this.scale.height;
