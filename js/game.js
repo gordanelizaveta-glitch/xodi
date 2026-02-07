@@ -2251,8 +2251,12 @@ buildLayout() {
 
   // ✅ компенсируем рост высоты карты, чтобы вертикальные расстояния остались "как раньше"
   const baseH = (this.BASE_CARD_H || this.CARD_H);
-  const dH = this.CARD_H - baseH;
-  const keepGapComp = Math.round(1.5 * dH);
+
+// компенсируем только рост карт, если вдруг карты стали меньше - не "толкаем" вниз
+const dH = Math.max(0, this.CARD_H - baseH);
+
+const keepGapComp = Math.round(1.5 * dH);
+
 
   // поле (tableau)
   const TABLEAU_EXTRA_DOWN = Math.round(H * 0.08) + tableauMoreDown - keepGapComp;
